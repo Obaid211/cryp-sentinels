@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Bot, Send, RefreshCw, Zap, Lock } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
@@ -48,6 +48,12 @@ export const CryptographicAssistant: React.FC<CryptographicAssistantProps> = ({ 
   const [inputPrompt, setInputPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<AssistantStatus | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll the chat window (not the page) to the latest message
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [messages, loading]);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -257,6 +263,9 @@ export const CryptographicAssistant: React.FC<CryptographicAssistantProps> = ({ 
               <span>Analyzing cryptographic query with {mode === 'OFFLINE' ? 'Sovereign Engine' : 'Gemini 3.6 Flash'}...</span>
             </div>
           )}
+
+          {/* Scroll anchor — scrollIntoView targets this, not the page */}
+          <div ref={bottomRef} />
         </div>
 
         {/* Suggested Queries */}
