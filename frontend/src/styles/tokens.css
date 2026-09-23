@@ -1,0 +1,144 @@
+/* ==========================================================================
+   ECDAT DESIGN TOKENS (SOURCE OF TRUTH)
+   Extracted directly from Stitch Design System: "Radical Monolith Editorial"
+   Screen: ECDAT | Royal Cryptographic Suite with Interactive MagnificationDock
+   ========================================================================== */
+
+:root {
+  /* Surfaces & Canvas (Museum-grade Light Canvas) */
+  --surface: #faf9f5;
+  --surface-dim: #dadad6;
+  --surface-bright: #faf9f5;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f4f4f0;
+  --surface-container: #eeeeea;
+  --surface-container-high: #e8e8e4;
+  --surface-container-highest: #e2e3df;
+  --surface-variant: #e2e3df;
+  /* Alias: raised surface card background (used by ScannerSuite, TourWizard, etc.) */
+  --surface-raised: #ffffff;
+
+  /* Typography & Foreground */
+  --on-surface: #1a1c1a;
+  --on-surface-variant: #5e3f38;
+  --inverse-surface: #2f312e;
+  --inverse-on-surface: #f1f1ed;
+  --text-primary: #111111;
+  --text-secondary: #737373;  /* alias for --tertiary, used by ScannerSuite/TourWizard */
+  --text-muted: #737373;
+  --text-inverse: #ffffff;
+
+  /* Primary Accent: Kinetic / Electric Vermilion */
+  --accent: #ff3300;           /* alias for --primary, used by ScannerSuite/TourWizard */
+  --primary: #ff3300;
+  --primary-deep: #b32100;
+  --on-primary: #ffffff;
+  --primary-container: #e02c00;
+  --on-primary-container: #fffbff;
+  --primary-fixed: #ffdad3;
+  --primary-fixed-dim: #ffb4a4;
+  --on-primary-fixed: #3e0500;
+  --on-primary-fixed-variant: #8c1800;
+
+  /* Secondary: Absolute Obsidian */
+  --secondary: #111111;
+  --secondary-muted: #5f5e5e;
+  --on-secondary: #ffffff;
+  --secondary-container: #e5e2e1;
+  --on-secondary-container: #656464;
+
+  /* Tertiary: Architectural Muted Stone */
+  --tertiary: #737373;
+  --tertiary-dark: #5c5c5c;
+  --on-tertiary: #ffffff;
+  --tertiary-container: #747474;
+  --on-tertiary-container: #fefcfc;
+
+  /* Severity Semantics */
+  --severity-critical: #b32100;
+  --severity-high: #ff3300;
+  --severity-medium: #d97706;
+  --severity-low: #15803d;
+  --severity-safe: #059669;
+
+  /* Error & Alerts */
+  --error: #ba1a1a;
+  --on-error: #ffffff;
+  --error-container: #ffdad6;
+  --on-error-container: #93000a;
+
+  /* Structural Borders (Strict 1px Constructivist Boundary Lines) */
+  --border: #e5e5e5;           /* alias for --border-dormant, used by ScannerSuite/TourWizard */
+  --border-dormant: #e5e5e5;
+  --border-focused: #111111;
+  --border-active: #ff3300;
+  --border-outline: #936e66;
+  --border-outline-variant: #e9bdb3;
+
+  /* Zero Radius (Radical Monolith / Non-Rounded) */
+  --radius-none: 0px;
+  --radius-sharp: 0px;
+
+  /* Spacing Scale (8px rhythm multiples) */
+  --space-xs: 0.25rem;   /* 4px */
+  --space-sm: 0.5rem;    /* 8px */
+  --space-md: 1rem;      /* 16px */
+  --space-lg: 1.5rem;    /* 24px */
+  --space-xl: 3rem;      /* 48px */
+  --space-2xl: 5rem;     /* 80px */
+  --gutter: 1.5rem;
+  --gutter-desktop: 2.5rem;
+  --margin: 1.25rem;
+  --margin-desktop: 4rem;
+
+  /* Elevation (No diffuse blurs - crisp flat offset) */
+  --shadow-flat: 4px 4px 0px #111111;
+  --shadow-flat-sm: 2px 2px 0px #111111;
+  --shadow-accent: 4px 4px 0px #ff3300;
+
+  /* Typography Families */
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'Geist', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+body {
+  margin: 0;
+  background-color: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Sharp constructivist utility classes */
+.border-sharp {
+  border-radius: 0 !important;
+}
+
+.shadow-flat {
+  box-shadow: var(--shadow-flat);
+}
+
+.shadow-flat-sm {
+  box-shadow: var(--shadow-flat-sm);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-tech {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+/* Hide scrollbar utility for clean horizontal docks */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
