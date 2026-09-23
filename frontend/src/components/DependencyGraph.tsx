@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { API_BASE_URL } from '../config';
 
 interface CryptoAssetSummary {
   id: number;
@@ -93,7 +94,7 @@ export const DependencyGraph: React.FC = () => {
   const fetchGraph = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://127.0.0.1:8000/api/graph/dependencies');
+      const res = await fetch(`${API_BASE_URL}/api/graph/dependencies`);
       if (res.ok) {
         const data: GraphData = await res.json();
         setGraphData(data);
@@ -113,7 +114,7 @@ export const DependencyGraph: React.FC = () => {
   const fetchBlastRadius = useCallback(async (serviceId: number) => {
     try {
       setBlastLoading(true);
-      const res = await fetch(`http://127.0.0.1:8000/api/graph/blast-radius/${serviceId}`);
+      const res = await fetch(`${API_BASE_URL}/api/graph/blast-radius/${serviceId}`);
       if (res.ok) {
         const data: BlastRadiusData = await res.json();
         setBlastRadius(data);

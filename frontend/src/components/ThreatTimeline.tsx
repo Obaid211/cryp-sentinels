@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface UrgencyVerdict {
   combined_requirement_years: number;
@@ -35,7 +36,7 @@ export const ThreatTimeline = () => {
 
   const calculateUrgency = useCallback(async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/threat/urgency', {
+      const res = await fetch(`${API_BASE_URL}/api/threat/urgency`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -59,7 +60,7 @@ export const ThreatTimeline = () => {
   const fetchRankings = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/threat/inventory-wide?planning_horizon=${planningHorizon}`);
+      const res = await fetch(`${API_BASE_URL}/api/threat/inventory-wide?planning_horizon=${planningHorizon}`);
       if (res.ok) {
         const json = await res.json();
         setRankings(json);

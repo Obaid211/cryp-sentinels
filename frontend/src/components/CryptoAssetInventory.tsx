@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, X, ShieldAlert, Cpu } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface AssetRecord {
   id: number;
@@ -60,7 +61,7 @@ export const CryptoAssetInventory = () => {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
       if (criticalityFilter) params.append('criticality', criticalityFilter);
-      const res = await fetch(`http://127.0.0.1:8000/api/inventory?${params.toString()}`);
+      const res = await fetch(`${API_BASE_URL}/api/inventory?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setAssets(data);
@@ -80,7 +81,7 @@ export const CryptoAssetInventory = () => {
     setSelectedAsset(asset);
     setDetailLoading(true);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/inventory/${asset.host}/${asset.port}/history`);
+      const res = await fetch(`${API_BASE_URL}/api/inventory/${asset.host}/${asset.port}/history`);
       if (res.ok) {
         const data = await res.json();
         setDetailData(data);

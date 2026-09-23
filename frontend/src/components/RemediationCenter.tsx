@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface RemediationItem {
   priority_rank: number;
@@ -40,7 +41,7 @@ export const RemediationCenter = () => {
     const fetchPlan = async () => {
       setLoading(true);
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/remediation/plan');
+        const res = await fetch(`${API_BASE_URL}/api/remediation/plan`);
         if (res.ok) {
           const json = await res.json();
           setData(json);

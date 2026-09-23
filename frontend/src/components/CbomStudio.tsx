@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Download, Copy, Check, FileCode } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 export const CbomStudio = () => {
   const [cbomData, setCbomData] = useState<string>('');
@@ -10,7 +11,7 @@ export const CbomStudio = () => {
     const fetchCbom = async () => {
       setLoading(true);
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/cbom/export');
+        const res = await fetch(`${API_BASE_URL}/api/cbom/export`);
         if (res.ok) {
           const json = await res.json();
           setCbomData(JSON.stringify(json, null, 2));

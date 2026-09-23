@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Bot, Send, RefreshCw, Zap, Lock } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface ChatMessage {
   sender: 'user' | 'assistant';
@@ -50,7 +51,7 @@ export const CryptographicAssistant: React.FC<CryptographicAssistantProps> = ({ 
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/assistant/status?mode=${mode}`);
+      const res = await fetch(`${API_BASE_URL}/api/assistant/status?mode=${mode}`);
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
@@ -80,7 +81,7 @@ export const CryptographicAssistant: React.FC<CryptographicAssistantProps> = ({ 
     setLoading(true);
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/assistant/chat', {
+      const res = await fetch(`${API_BASE_URL}/api/assistant/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, mode }),

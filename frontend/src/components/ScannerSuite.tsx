@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL } from '../config';
 
 type ScannerTab = 'TLS' | 'CODE' | 'CONTAINER' | 'API';
 
@@ -168,7 +169,7 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
     setStreamActive(true);
     setStreamProgress(0);
 
-    const eventSource = new EventSource(`http://127.0.0.1:8000/api/scanners/stream?target=${encodeURIComponent(targetName)}`);
+    const eventSource = new EventSource(`${API_BASE_URL}/api/scanners/stream?target=${encodeURIComponent(targetName)}`);
 
     eventSource.onmessage = (event) => {
       try {
@@ -197,7 +198,7 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
     triggerScanStream(`${tlsHost}:${tlsPort}`);
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/scanners/tls', {
+      const res = await fetch(`${API_BASE_URL}/api/scanners/tls`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ host: tlsHost, port: parseInt(tlsPort, 10) || 443, mode }),
@@ -217,7 +218,7 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
     if (!tlsResult || tlsResult.status !== 'success') return;
     try {
       setImportStatus('Importing...');
-      const res = await fetch('http://127.0.0.1:8000/api/scanners/import', {
+      const res = await fetch(`${API_BASE_URL}/api/scanners/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ finding: tlsResult }),
@@ -238,7 +239,7 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
     triggerScanStream(`AST Scanner: ${codeFilename}`);
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/scanners/code', {
+      const res = await fetch(`${API_BASE_URL}/api/scanners/code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: codeContent, filename: codeFilename }),
@@ -258,7 +259,7 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
     triggerScanStream('Dockerfile Build Layers');
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/scanners/container', {
+      const res = await fetch(`${API_BASE_URL}/api/scanners/container`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: dockerContent, filename: 'Dockerfile' }),
@@ -278,7 +279,7 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
     triggerScanStream(apiUrl);
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/scanners/api', {
+      const res = await fetch(`${API_BASE_URL}/api/scanners/api`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: apiUrl, sample_jwt: jwtToken }),

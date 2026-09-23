@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle2, Clock } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface ComplianceData {
   stats: {
@@ -31,7 +32,7 @@ export const ComplianceReadiness = () => {
     const fetchCompliance = async () => {
       setLoading(true);
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/compliance/summary');
+        const res = await fetch(`${API_BASE_URL}/api/compliance/summary`);
         if (res.ok) {
           const json = await res.json();
           setData(json);

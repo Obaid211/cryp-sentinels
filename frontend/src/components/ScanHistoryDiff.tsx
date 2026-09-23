@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { API_BASE_URL } from '../config';
 
 interface SnapshotItem {
   id: number;
@@ -54,7 +55,7 @@ export const ScanHistoryDiff: React.FC = () => {
   // Fetch snapshots list
   const fetchSnapshots = useCallback(async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/snapshots/list');
+      const res = await fetch(`${API_BASE_URL}/api/snapshots/list`);
       if (res.ok) {
         const data: SnapshotItem[] = await res.json();
         setSnapshots(data);
@@ -82,7 +83,7 @@ export const ScanHistoryDiff: React.FC = () => {
     setStatusMessage(null);
 
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/snapshots/diff?old_id=${oldId}&new_id=${newId}`);
+      const res = await fetch(`${API_BASE_URL}/api/snapshots/diff?old_id=${oldId}&new_id=${newId}`);
       if (res.ok) {
         const data: DiffResult = await res.json();
         setDiff(data);
@@ -101,7 +102,7 @@ export const ScanHistoryDiff: React.FC = () => {
     setSaving(true);
     setStatusMessage(null);
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/snapshots/save', {
+      const res = await fetch(`${API_BASE_URL}/api/snapshots/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newSnapshotName || undefined }),

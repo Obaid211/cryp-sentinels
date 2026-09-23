@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { API_BASE_URL } from '../config';
 
 interface StrategyDef {
   id: string;
@@ -94,7 +95,7 @@ export const PqcSimulator: React.FC = () => {
   // Fetch available strategies
   const fetchStrategies = useCallback(async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/simulate/strategies');
+      const res = await fetch(`${API_BASE_URL}/api/simulate/strategies`);
       if (res.ok) {
         const data: StrategyDef[] = await res.json();
         setStrategies(data);
@@ -108,7 +109,7 @@ export const PqcSimulator: React.FC = () => {
   const runSimulation = useCallback(async (stratId: string) => {
     try {
       setLoading(true);
-      const res = await fetch('http://127.0.0.1:8000/api/simulate/run', {
+      const res = await fetch(`${API_BASE_URL}/api/simulate/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ strategy: stratId }),

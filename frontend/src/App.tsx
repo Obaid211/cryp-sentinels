@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { API_BASE_URL } from './config';
 import { Navbar } from './components/Navbar';
 import { LandingPage } from './components/LandingPage';
 import { ExecutiveDashboard } from './components/ExecutiveDashboard';
@@ -28,7 +29,7 @@ export function App() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/dashboard/summary?mode=${currentMode}`);
+      const response = await fetch(`${API_BASE_URL}/api/dashboard/summary?mode=${currentMode}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} failed to fetch dashboard summary`);
       }
@@ -68,7 +69,7 @@ export function App() {
 
   const handleRefreshData = async () => {
     try {
-      await fetch('http://127.0.0.1:8000/api/score/recalculate', { method: 'POST' });
+      await fetch(`${API_BASE_URL}/api/score/recalculate`, { method: 'POST' });
       showToast('✓ MWQRS scores recalculated across all assets!');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       if (currentTab === 'dashboard') {
@@ -82,7 +83,7 @@ export function App() {
 
   const handleSeedDemo = async () => {
     try {
-      await fetch('http://127.0.0.1:8000/api/demo/seed', { method: 'POST' });
+      await fetch(`${API_BASE_URL}/api/demo/seed`, { method: 'POST' });
       showToast('✓ Demo services and topological dependencies re-seeded!');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       if (currentTab === 'dashboard') {
