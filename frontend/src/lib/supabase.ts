@@ -29,20 +29,22 @@ import { createBrowserClient } from '@supabase/ssr'
 export type EcdatDatabase = Record<string, unknown>
 
 // ---------------------------------------------------------------------------
+// Production Fallback Constants (Safe public client-side credentials)
+// ---------------------------------------------------------------------------
+const DEFAULT_SUPABASE_URL = 'https://mdpacbqwskcjpgwtvonk.supabase.co'
+const DEFAULT_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kcGFjYnF3c2tjanBnd3R2b25rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNTQyODIsImV4cCI6MjEwNTkzMDI4Mn0.rnkCc5oX95QwzzX9XdYV7Gim51MLbzx-TN-tdi7kufM'
+
+// ---------------------------------------------------------------------------
 // Browser (client-side) client
 // ---------------------------------------------------------------------------
 export function createClient(): SupabaseClient<EcdatDatabase> {
   const supabaseUrl =
-    (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? ''
+    (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ||
+    DEFAULT_SUPABASE_URL
   const supabaseAnonKey =
-    (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? ''
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn(
-      '[Supabase] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set. ' +
-        'Supabase auth will fail until configured in .env or Vercel env.'
-    )
-  }
+    (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() ||
+    DEFAULT_SUPABASE_ANON_KEY
 
   return createBrowserClient<EcdatDatabase>(supabaseUrl, supabaseAnonKey, {
     auth: {

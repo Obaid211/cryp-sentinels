@@ -66,6 +66,15 @@
    - Tracks `currentUserEmail` dynamically from the active Supabase session.
    - Renders in the top-left utility bar with an animated emerald pulse radar dot, the authenticated email in lowercase monospace, and a distinct `ONLINE` status pill.
    - Automatically reverts to default anonymous/NTRO badge upon sign-out.
+9. **Render PostgreSQL & SQLAlchemy 2.0 Compatibility** (`backend/requirements.txt`, `session.py`, `main.py`)
+   - Added `psycopg[binary]>=3.1.18` alongside `psycopg2-binary` to satisfy SQLAlchemy 2.0 default driver requirements.
+   - Added automated connection URL scheme normalization (`postgres://` / `postgresql://` -> `postgresql+psycopg2://`) in `session.py` with fault-tolerant engine fallback.
+   - Added `allow_origin_regex=r"https?://.*"` in `main.py` for full cross-origin support from Vercel deployments.
+10. **Vercel Production API Routing & Safe Client Auth Fallback** (`config.ts`, `vercel.json`, `supabase.ts`, `LoginPage.tsx`)
+   - Replaced `<YOUR_BACKEND_DOMAIN>` placeholder in `vercel.json` with live Render backend `https://cryp-sentinels-backend.onrender.com`.
+   - Set production default fallback in `config.ts` so Vercel SPA never attempts calls to `127.0.0.1:8000`.
+   - Injected safe public client-side Supabase credentials fallback in `supabase.ts` ensuring Vercel builds always have working auth clients.
+   - Added 1-click **Quick Demo Access (Guest Mode)** in `LoginPage.tsx` so reviewers and users can instantly explore without email confirmation blockers.
 
 ### ⚠️ Known limitations (not bugs)
 - **Signup requires email confirmation.** Supabase's default "Confirm email"

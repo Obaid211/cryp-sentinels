@@ -40,9 +40,9 @@ export interface LoginPageProps {
   customHeader?: string
   /**
    * Fired when a confirmed session exists for this user (email+password
-   * sign-in, or an OAuth return with a session in the URL hash).
+   * sign-in, OAuth return with session, or guest demo access).
    */
-  onAuthSuccess?: () => void
+  onAuthSuccess?: (email?: string) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -197,9 +197,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const fireAuthSuccess = useCallback(() => {
     if (onAuthSuccess && !redirected) {
       setRedirected(true)
-      onAuthSuccess()
+      onAuthSuccess(sessionUser?.email ?? undefined)
     }
-  }, [onAuthSuccess, redirected])
+  }, [onAuthSuccess, redirected, sessionUser])
 
   useEffect(() => {
     if (sessionUser) {
@@ -208,6 +208,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       return () => window.clearTimeout(t)
     }
   }, [sessionUser, fireAuthSuccess])
+
+  const handleQuickDemoAccess = () => {
+    setError(null)
+    setSuccess('✓ Demo authorization granted. Entering cryptographic console…')
+    setSessionUser({ email: 'analyst@ecdat.internal' })
+    if (onAuthSuccess) {
+      setTimeout(() => {
+        onAuthSuccess('analyst@ecdat.internal')
+      }, 400)
+    }
+  }
 
   // ---- Derived ------------------------------------------------------------
   const isSignedIn = Boolean(sessionUser)
@@ -253,7 +264,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     const result = await signInWithEmail(email.trim(), password)
     setBusy(false)
     if (!result.success) {
-      setError(result.error ?? 'Sign-in failed')
+      const errMsg = result.error ?? 'Sign-in failed'
+      if (errMsg.toLowerCase().includes('invalid login credentials')) {
+        setError('Invalid credentials. If you haven\'t created an account yet, switch to the "Sign Up" tab above, or use "Quick Demo Access" below.')
+      } else {
+        setError(errMsg)
+      }
     } else {
       setSuccess('Signed in. Redirecting to the dashboard…')
     }
@@ -280,7 +296,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       setError(result.error ?? 'Sign-up failed.')
     } else {
       setSuccess(
-        'Check your inbox to verify your email. Supabase sends a confirmation link.'
+        'Account created! Check your email inbox to verify your account, or sign in now.'
       )
     }
   }
@@ -618,6 +634,35 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                       />
                     </svg>
                     Sign in with GitHub
+                  </span>
+                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ flex: '1', height: '1px', background: 'var(--border)' }} />
+                  <span style={{ ...labelStyles, fontSize: '10px', color: 'var(--text-muted)' }}>EVALUATION</span>
+                  <div style={{ flex: '1', height: '1px', background: 'var(--border)' }} />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleQuickDemoAccess}
+                  disabled={busy}
+                  style={{
+                    ...outlineBtnStyle,
+                    borderColor: 'var(--severity-safe)',
+                    color: 'var(--severity-safe)',
+                    background: 'rgba(16, 185, 129, 0.06)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(16, 185, 129, 0.16)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(16, 185, 129, 0.06)'
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <span style={{ display: 'inline-block', width: '7px', height: '7px', borderRadius: '50%', backgroundColor: 'var(--severity-safe)' }} />
+                    Quick Demo Access (Guest Mode)
                   </span>
                 </button>
               </>

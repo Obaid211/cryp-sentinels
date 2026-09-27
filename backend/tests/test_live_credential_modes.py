@@ -80,7 +80,17 @@ def test_aws_kms_live_mode_detection(monkeypatch):
     }
     mock_boto_client.get_key_rotation_status.return_value = {"KeyRotationEnabled": True}
 
-    with patch("boto3.client", return_value=mock_boto_client):
+    mock_boto_module = MagicMock()
+    mock_boto_module.client.return_value = mock_boto_client
+    mock_botocore = MagicMock()
+    mock_botocore_exceptions = MagicMock()
+    mock_botocore_exceptions.BotoCoreError = Exception
+    mock_botocore_exceptions.ClientError = Exception
+    with patch.dict("sys.modules", {
+        "boto3": mock_boto_module,
+        "botocore": mock_botocore,
+        "botocore.exceptions": mock_botocore_exceptions,
+    }):
         scan_result = scan_cloud_kms_manifest(manifest_data=None, provider_hint="aws_kms")
         assert scan_result["execution_mode"] == "live"
         assert scan_result["keys_scanned"] == 1

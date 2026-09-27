@@ -194,8 +194,11 @@ export function App() {
   }, [isLoggedIn, currentTab, showToast]);
 
   // ---- Fired by LoginPage once a confirmed session exists ------------------
-  const handleAuthSuccess = useCallback(() => {
+  const handleAuthSuccess = useCallback((email?: string) => {
     setIsLoggedIn(true);
+    if (email) {
+      setCurrentUserEmail(email);
+    }
     setCurrentTab('dashboard');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     void fetchDashboardData(mode);
