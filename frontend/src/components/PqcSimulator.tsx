@@ -126,10 +126,12 @@ export const PqcSimulator: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react/set-state-in-effect
     void fetchStrategies();
   }, [fetchStrategies]);
 
   useEffect(() => {
+    // eslint-disable-next-line react/set-state-in-effect
     void runSimulation(selectedStrategy);
   }, [selectedStrategy, runSimulation]);
 

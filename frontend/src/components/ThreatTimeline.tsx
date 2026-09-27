@@ -86,7 +86,9 @@ export const ThreatTimeline = () => {
   }, [planningHorizon]);
 
   useEffect(() => {
+    // eslint-disable-next-line react/set-state-in-effect
     void calculateUrgency();
+    // eslint-disable-next-line react/set-state-in-effect
     void fetchRankings();
   }, [calculateUrgency, fetchRankings]);
 

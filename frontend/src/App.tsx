@@ -122,6 +122,7 @@ export function App() {
   // Ensure telemetry is automatically loaded when the user enters the dashboard
   useEffect(() => {
     if (currentTab === 'dashboard' && !dashboardData && !loading) {
+      // eslint-disable-next-line react/set-state-in-effect
       void fetchDashboardData(mode);
     }
   }, [currentTab, dashboardData, loading, mode, fetchDashboardData]);

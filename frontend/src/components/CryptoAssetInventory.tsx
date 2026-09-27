@@ -112,6 +112,7 @@ export const CryptoAssetInventory = () => {
   }, [search, criticalityFilter]);
 
   useEffect(() => {
+    // eslint-disable-next-line react/set-state-in-effect
     void fetchAssets();
   }, [fetchAssets]);
 

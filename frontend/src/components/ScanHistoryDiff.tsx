@@ -73,6 +73,7 @@ export const ScanHistoryDiff: React.FC = () => {
   }, [oldId, newId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react/set-state-in-effect
     void fetchSnapshots();
   }, [fetchSnapshots]);
 

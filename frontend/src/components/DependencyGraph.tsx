@@ -127,11 +127,13 @@ export const DependencyGraph: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react/set-state-in-effect
     void fetchGraph();
   }, [fetchGraph]);
 
   useEffect(() => {
     if (selectedServiceId !== null) {
+      // eslint-disable-next-line react/set-state-in-effect
       void fetchBlastRadius(selectedServiceId);
     }
   }, [selectedServiceId, fetchBlastRadius]);

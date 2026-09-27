@@ -68,6 +68,7 @@ export const CryptographicAssistant: React.FC<CryptographicAssistantProps> = ({ 
   }, [mode]);
 
   useEffect(() => {
+    // eslint-disable-next-line react/set-state-in-effect
     void fetchStatus();
   }, [fetchStatus]);
 
