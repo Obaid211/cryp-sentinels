@@ -201,7 +201,7 @@ exists and env vars are set.** Hand these steps to the user:
 | `npm run lint` (oxlint) | ✅ 0 errors |
 | `npm run build` (frontend) | ✅ pass (0 warnings; entry bundle 105 kB) |
 | Live/Mock Scanner Healthcheck | ✅ verified (`/health` & `/api/scanners/modes`) |
-| GitHub Actions CI/CD Pipeline | ✅ configured (`.github/workflows/ci.yml`) |
+| GitHub Actions CI/CD Pipeline | ✅ pass (100% green across Backend, Frontend & Docker jobs) |
 | Docker multi-stage & .dockerignore | ✅ configured (`docker-compose.yml`, `.dockerignore`) |
 | Live backend `/health` | ✅ 200 OK |
 | Live backend `/api/inventory` | ✅ 200 OK (all 7 sources verified) |
