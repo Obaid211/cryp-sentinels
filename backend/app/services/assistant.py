@@ -138,16 +138,27 @@ def _get_inventory_context(db: Optional[Session]) -> str:
         medium = sum(1 for a in assets if 50.0 <= a.risk_score < 80.0)
         avg_score = round(sum(a.risk_score for a in assets) / total, 1) if total else 0.0
         
+        # Multi-source discovery distribution
+        sources_count: Dict[str, int] = {}
+        for a in assets:
+            src = a.source or "tls"
+            sources_count[src] = sources_count.get(src, 0) + 1
+        sources_summary = ", ".join([f"{src}: {cnt}" for src, cnt in sources_count.items()])
+        
         top_vulnerable = sorted(assets, key=lambda a: a.risk_score, reverse=True)[:3]
-        top_list = ", ".join([f"{a.host}:{a.port} ({a.cert_key_type} {a.cert_key_size_bits}b, MWQRS {a.risk_score})" for a in top_vulnerable])
+        top_list = ", ".join([
+            f"{a.host}{f':{a.port}' if a.port and a.port > 0 else ''} [{a.source or 'tls'}] ({a.cert_key_type or a.algorithm} {a.cert_key_size_bits or ''}b, MWQRS {a.risk_score})"
+            for a in top_vulnerable
+        ])
         
         return (
             f"\nCURRENT ORGANIZATION POSTURE:\n"
-            f"- Total Assets: {total} monitored cryptographic endpoints\n"
+            f"- Total Assets: {total} monitored cryptographic assets across 7 discovery sources\n"
+            f"- Discovery Breakdown: {sources_summary}\n"
             f"- Average MWQRS: {avg_score}/100.0\n"
             f"- Critical Assets (MWQRS >= 80): {critical}\n"
             f"- Medium Assets (50 <= MWQRS < 80): {medium}\n"
-            f"- Top At-Risk Endpoints: {top_list}\n"
+            f"- Top At-Risk Assets: {top_list}\n"
         )
     except Exception:
         return ""
@@ -242,7 +253,8 @@ def query_cryptographic_assistant(
 
     last_error = None
     try:
-        from google import genai
+        import importlib
+        genai = importlib.import_module("google.genai")
         for api_key in api_keys:
             client = genai.Client(api_key=api_key)
             for model_name in candidate_models:

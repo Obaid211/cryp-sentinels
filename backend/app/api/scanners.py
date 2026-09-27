@@ -36,6 +36,27 @@ class TlsScanRequest(BaseModel):
 class ImportFindingRequest(BaseModel):
     finding: Dict[str, Any]
 
+@router.get("/modes")
+def get_scanner_modes():
+    """Reports operational modes (live vs mock) and credential readiness for all discovery scanners."""
+    from app.services.cloud_kms_scanner import get_cloud_kms_status
+    from app.services.hsm_scanner import get_hsm_status
+
+    kms_status = get_cloud_kms_status()
+    hsm_status = get_hsm_status()
+
+    return {
+        "aws_kms": kms_status.get("aws_kms", {}),
+        "azure_key_vault": kms_status.get("azure_key_vault", {}),
+        "gcp_kms": kms_status.get("gcp_kms", {}),
+        "hsm_pkcs11": hsm_status,
+        "tls": {"provider": "TLS Network Prober", "mode": "live", "details": "Direct socket handshake TLS discovery active"},
+        "source_code": {"provider": "Source Code Static Scanner", "mode": "live", "details": "Direct regex/AST scanning active"},
+        "dependency": {"provider": "Dependency Manifest Scanner", "mode": "live", "details": "Direct package manifest parsing active"},
+        "container": {"provider": "Container Image Scanner", "mode": "live", "details": "Dockerfile & container layer static analysis active"},
+        "binary": {"provider": "Binary Symbol Scanner", "mode": "live", "details": "ELF/PE/Mach-O symbol and string analysis active"}
+    }
+
 @router.post("/code")
 def run_code_scan(req: CodeScanRequest):
     """Scans source code for cryptographic calls, weak algorithms (MD5, SHA1, DES), and hardcoded keys."""
@@ -47,13 +68,26 @@ def run_code_scan(req: CodeScanRequest):
     }
 
 @router.post("/container")
-def run_container_scan(req: ContainerScanRequest):
+def run_container_scan(req: ContainerScanRequest, db: Session = Depends(get_db)):
     """Scans Dockerfile content for base image vulnerabilities, disabled TLS verification, and embedded keys."""
-    findings = scan_dockerfile_content(req.content, req.filename or "Dockerfile")
+    from app.services.container_scanner import scan_container_definition, import_container_finding_to_inventory
+    result = scan_container_definition(dockerfile_content=req.content, filename=req.filename or "Dockerfile")
+    findings = result.get("findings", [])
+    imported = []
+    for f in findings:
+        imp = import_container_finding_to_inventory(
+            db=db,
+            finding=f,
+            container_name=req.filename or "Dockerfile",
+            business_criticality="high",
+            data_lifetime="1-3y"
+        )
+        imported.append(imp)
     return {
         "filename": req.filename,
         "findings_count": len(findings),
-        "findings": findings
+        "findings": findings,
+        "inventory_imported": len(imported)
     }
 
 @router.post("/api")

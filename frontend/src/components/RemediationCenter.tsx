@@ -9,6 +9,12 @@ interface RemediationItem {
   host: string;
   port: number;
   service: string;
+  source: string;                  // Phase 1
+  business_criticality: string;    // Phase 1
+  data_lifetime: string;           // Phase 1
+  library: string;                 // Phase 1
+  usage_context: string;           // Phase 1
+  file_path: string;               // Phase 1
   criticality: string;
   algorithm: string;
   key_size: number;
@@ -19,6 +25,10 @@ interface RemediationItem {
   why_prioritized: string;
   recommended_actions: string[];
   migration_direction: string;
+  hybrid_alternative: string;      // Phase 1
+  migration_complexity: string;    // Phase 1
+  migration_cost: string;          // Phase 1
+  latency_impact: string;          // Phase 1
   dependency_impact: string;
 }
 
@@ -156,21 +166,66 @@ export const RemediationCenter = () => {
               {/* Expandable Details */}
               {isExpanded && (
                 <div className="border-t border-[#e5e5e5] bg-[#faf9f5] p-6 space-y-4 font-mono text-xs">
+                  {/* Phase 1: Source + Criticality meta row */}
+                  <div className="flex flex-wrap gap-3">
+                    {item.source && (
+                      <span className={`border px-2 py-0.5 font-bold text-[10px] uppercase ${
+                        item.source === 'source_code' ? 'text-violet-700 bg-violet-50 border-violet-200' :
+                        item.source === 'dependency' ? 'text-amber-700 bg-amber-50 border-amber-200' :
+                        item.source === 'container' ? 'text-emerald-700 bg-emerald-50 border-emerald-200' :
+                        item.source === 'binary' ? 'text-gray-700 bg-gray-50 border-gray-200' :
+                        item.source === 'hsm' ? 'text-purple-700 bg-purple-50 border-purple-200' :
+                        item.source === 'cloud_kms' ? 'text-sky-700 bg-sky-50 border-sky-200' :
+                        'text-blue-700 bg-blue-50 border-blue-200'
+                      }`}>
+                        {item.source === 'source_code' ? 'Source Code' :
+                         item.source === 'dependency' ? 'Dependency' :
+                         item.source === 'container' ? 'Container' :
+                         item.source === 'binary' ? 'Binary' :
+                         item.source === 'hsm' ? 'Hardware HSM' :
+                         item.source === 'cloud_kms' ? 'Cloud KMS' : 'TLS/Network'}
+                      </span>
+                    )}
+                    {item.business_criticality && (
+                      <span className="border border-[#e5e5e5] bg-white px-2 py-0.5 font-bold text-[10px] text-secondary">
+                        Biz Crit: {item.business_criticality}
+                      </span>
+                    )}
+                    {item.data_lifetime && (
+                      <span className="border border-[#e5e5e5] bg-white px-2 py-0.5 font-bold text-[10px] text-secondary">
+                        Data Lifetime: {item.data_lifetime}
+                      </span>
+                    )}
+                  </div>
                   {/* Why Prioritized Reasoning */}
                   <div className="border-l-2 border-primary bg-white p-4">
                     <div className="text-[10px] text-primary uppercase font-bold">Why It Was Prioritized:</div>
                     <div className="mt-1 text-secondary leading-relaxed">{item.why_prioritized}</div>
                   </div>
 
-                  {/* Migration Trajectory & Impact */}
+                  {/* Migration Trajectory & Impact (Phase 1 enriched) */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="border border-[#e5e5e5] bg-white p-4">
-                      <div className="text-tertiary uppercase text-[10px]">Migration Trajectory:</div>
+                      <div className="text-tertiary uppercase text-[10px]">PQC Migration Target:</div>
                       <div className="mt-1 font-bold text-secondary">{item.migration_direction}</div>
+                      {item.hybrid_alternative && (
+                        <div className="mt-1 text-tertiary text-[11px]">Hybrid: {item.hybrid_alternative}</div>
+                      )}
                     </div>
                     <div className="border border-[#e5e5e5] bg-white p-4">
-                      <div className="text-tertiary uppercase text-[10px]">Dependency Impact:</div>
-                      <div className="mt-1 font-bold text-secondary">{item.dependency_impact}</div>
+                      <div className="text-tertiary uppercase text-[10px]">Migration Attributes:</div>
+                      <div className="mt-2 flex flex-col gap-1">
+                        {item.migration_complexity && (
+                          <div className="flex justify-between"><span className="text-tertiary">Complexity:</span><span className="font-bold text-secondary">{item.migration_complexity}</span></div>
+                        )}
+                        {item.migration_cost && (
+                          <div className="flex justify-between"><span className="text-tertiary">Cost:</span><span className="font-bold text-secondary">{item.migration_cost}</span></div>
+                        )}
+                        {item.latency_impact && (
+                          <div className="flex justify-between"><span className="text-tertiary">Latency Impact:</span><span className="font-bold text-secondary">{item.latency_impact}</span></div>
+                        )}
+                        <div className="flex justify-between"><span className="text-tertiary">Dependency Impact:</span><span className="font-bold text-secondary">{item.dependency_impact}</span></div>
+                      </div>
                     </div>
                   </div>
 

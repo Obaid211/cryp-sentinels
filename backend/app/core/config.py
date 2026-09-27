@@ -41,6 +41,20 @@ class Settings(BaseSettings):
         description="Fallback Gemini model"
     )
 
+    # Supabase Auth Configuration
+    SUPABASE_URL: str = Field(
+        default="",
+        description="Supabase Project URL"
+    )
+    SUPABASE_JWT_SECRET: str = Field(
+        default="",
+        description="Supabase JWT secret or signing key for token verification"
+    )
+    REQUIRE_AUTH: bool = Field(
+        default=False,
+        description="Whether to enforce strict 401 on unauthenticated requests"
+    )
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
         extra="ignore"

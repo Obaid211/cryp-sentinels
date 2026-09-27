@@ -21,7 +21,8 @@ def build_networkx_graph(db: Session) -> nx.DiGraph:
             score = float(a.risk_score or 0.0)
             if score > max_risk:
                 max_risk = score
-            is_vuln = bool(a.cert_key_type and any(k in a.cert_key_type.upper() for k in ["RSA", "ECC", "ECDSA", "DSA"]))
+            key_type = a.cert_key_type or a.algorithm or ""
+            is_vuln = bool(key_type and any(k in key_type.upper() for k in ["RSA", "ECC", "ECDSA", "DSA", "DH", "MD5", "SHA-1", "DES"]))
             if is_vuln:
                 has_vulnerable = True
 
@@ -29,11 +30,14 @@ def build_networkx_graph(db: Session) -> nx.DiGraph:
                 "id": a.id,
                 "host": a.host,
                 "port": a.port,
-                "cert_key_type": a.cert_key_type,
+                "source": a.source or "tls",
+                "cert_key_type": key_type,
                 "cert_key_size_bits": a.cert_key_size_bits,
                 "tls_version": a.tls_version,
                 "risk_score": score,
-                "is_vulnerable": is_vuln
+                "is_vulnerable": is_vuln,
+                "business_criticality": a.business_criticality or "medium",
+                "data_lifetime": a.data_lifetime or "1-3y",
             })
 
         G.add_node(

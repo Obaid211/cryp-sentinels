@@ -49,6 +49,12 @@ def get_dashboard_summary(
         "quantum_vulnerable_percent": round((critical_count + medium_count) / total_scanned * 100, 1) if total_scanned else 0.0
     }
 
+    # Sources breakdown across all 7 discovery types
+    sources_breakdown: Dict[str, int] = {}
+    for a in assets:
+        src = a.source or "tls"
+        sources_breakdown[src] = sources_breakdown.get(src, 0) + 1
+
     # Top vulnerable assets
     sorted_assets = sorted(assets, key=lambda x: x.risk_score, reverse=True)
     top_assets = []
@@ -64,9 +70,12 @@ def get_dashboard_summary(
             "id": a.id,
             "host": a.host,
             "port": a.port,
+            "source": a.source or "tls",
+            "business_criticality": a.business_criticality or "medium",
+            "data_lifetime": a.data_lifetime or "1-3y",
             "service_name": a.linked_service.name if a.linked_service else "Unlinked",
             "criticality": a.linked_service.criticality if a.linked_service else "P2",
-            "cert_key_type": a.cert_key_type,
+            "cert_key_type": a.cert_key_type or a.algorithm or "Unknown",
             "cert_key_size_bits": a.cert_key_size_bits,
             "tls_version": a.tls_version,
             "days_to_expiry": a.days_to_expiry,
@@ -84,6 +93,7 @@ def get_dashboard_summary(
             "avg_mwqrs": avg_mwqrs,
         },
         "public_scan_stats": public_scan_stats,
+        "sources_breakdown": sources_breakdown,
         "risk_distribution": risk_distribution,
         "key_type_breakdown": key_type_data,
         "top_vulnerable_assets": top_assets

@@ -14,7 +14,8 @@ import {
   Bot,
   ArrowUpRight,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LogIn
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -26,6 +27,9 @@ interface NavbarProps {
   onSeedDemo?: () => void;
   onDownloadReport?: () => void;
   onStartTour?: () => void;
+  isLoggedIn?: boolean;
+  userEmail?: string | null;
+  onLogin?: () => void;
 }
 
 export const Navbar = ({
@@ -37,6 +41,9 @@ export const Navbar = ({
   onSeedDemo,
   onDownloadReport,
   onStartTour,
+  isLoggedIn = false,
+  userEmail,
+  onLogin,
 }: NavbarProps) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -97,12 +104,29 @@ export const Navbar = ({
       {/* Row 1: Top Utility Bar */}
       <div className="flex h-8 sm:h-9 w-full items-center justify-between border-b border-[#e5e5e5] px-3 sm:px-6 text-[10px] sm:text-[11px] uppercase tracking-wider font-mono text-tertiary overflow-x-auto no-scrollbar">
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <span className="flex items-center gap-1.5 text-secondary font-semibold">
-            <span className="inline-block h-1.5 w-1.5 bg-primary animate-pulse" />
-            NTRO SIH26164
-          </span>
+          {isLoggedIn && userEmail ? (
+            <div className="flex items-center gap-2 border border-emerald-600/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-900">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
+              </span>
+              <span className="font-semibold lowercase tracking-normal text-[11px] text-emerald-950">
+                {userEmail}
+              </span>
+              <span className="border border-emerald-600/30 bg-white px-1 py-0.2 text-[9px] font-bold text-emerald-700">
+                ONLINE
+              </span>
+            </div>
+          ) : (
+            <span className="flex items-center gap-1.5 text-secondary font-semibold">
+              <span className="inline-block h-1.5 w-1.5 bg-primary animate-pulse" />
+              NTRO SIH26164
+            </span>
+          )}
           <span className="hidden sm:inline text-tertiary">/</span>
-          <span className="hidden md:inline text-tertiary">FIPS 203/204/205 PQC SUITE</span>
+          <span className="hidden md:inline text-tertiary">
+            {isLoggedIn && userEmail ? 'NTRO SIH26164 · FIPS 203/204/205 PQC SUITE' : 'FIPS 203/204/205 PQC SUITE'}
+          </span>
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
@@ -180,6 +204,22 @@ export const Navbar = ({
               REPORT .MD
             </button>
           )}
+
+          {/* Auth action: login/logout */}
+          {onLogin && (
+            <button
+              onClick={onLogin}
+              title={isLoggedIn ? 'Sign out' : 'Sign in / open login'}
+              className={`inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-mono border whitespace-nowrap shrink-0 transition-all duration-150 ${
+                isLoggedIn
+                  ? 'border-[#e5e5e5] bg-white text-secondary hover:border-error hover:text-error'
+                  : 'border-primary bg-primary text-white font-bold hover:bg-primary-deep'
+              }`}
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              <span className="hidden xs:inline">{isLoggedIn ? 'Sign out' : 'Log in'}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -203,8 +243,8 @@ export const Navbar = ({
           </div>
         </div>
 
-        {/* Right Controls: Console Button */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Right Controls: Console Button (logged-in users only) */}
+        {isLoggedIn ? (
           <button
             onClick={() => onSelectTab('dashboard')}
             className="flex items-center gap-1.5 bg-primary px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-white hover:bg-primary-deep transition-all shadow-flat-sm hover:-translate-y-0.5"
@@ -212,7 +252,7 @@ export const Navbar = ({
             <span>Console</span>
             <ArrowUpRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </button>
-        </div>
+        ) : null}
       </div>
 
       {/* Row 3: Dedicated Full-Width Persistent Navigation Bar (NEVER HIDDEN, ALWAYS VISIBLE ACROSS ALL SCREEN SIZES) */}

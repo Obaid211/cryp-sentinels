@@ -1,6 +1,7 @@
 import re
 import ast
 import json
+import hashlib
 import base64
 import socket
 import ssl
@@ -17,40 +18,56 @@ from app.services.scoring import calculate_mwqrs
 # ==========================================
 CRYPTO_CODE_PATTERNS = {
     "WEAK_HASH_MD5": {
-        "pattern": r"hashlib\.md5\(|MD5\(|CryptoJS\.MD5|MessageDigest\.getInstance\(['\"]MD5['\"]\)",
+        "pattern": r"hashlib\.md5\(|MD5\(|CryptoJS\.MD5",
         "severity": "CRITICAL",
         "type": "Weak Hashing Algorithm (MD5)",
         "crypto_technology": "Cryptographic Hash (MD5)",
         "confidence": "HIGH",
         "explanation": "MD5 is cryptographically broken due to practical collision vulnerabilities.",
         "remediation": "Replace with SHA-256 / SHA-3 or secure password derivation (Argon2id, bcrypt).",
+        "algorithm": "MD5",
+        "usage_context": "hash",
+        "confidence_score": 0.95,
+        "key_size": 128,
     },
     "WEAK_HASH_SHA1": {
-        "pattern": r"hashlib\.sha1\(|SHA1\(|CryptoJS\.SHA1|MessageDigest\.getInstance\(['\"]SHA-1['\"]\)",
+        "pattern": r"hashlib\.sha1\(|SHA1\(|CryptoJS\.SHA1",
         "severity": "HIGH",
         "type": "Weak Hashing Algorithm (SHA-1)",
         "crypto_technology": "Cryptographic Hash (SHA-1)",
         "confidence": "HIGH",
-        "explanation": "SHA-1 has practical collision attacks demonstrated. Prohibited by NIST SP 800-52 Rev. 2.",
+        "explanation": "SHA-1 has practical collision attacks. Prohibited by NIST SP 800-52 Rev. 2.",
         "remediation": "Migrate to SHA-256, SHA-384, or SHA-512.",
+        "algorithm": "SHA-1",
+        "usage_context": "hash",
+        "confidence_score": 0.95,
+        "key_size": 160,
     },
     "WEAK_CIPHER_DES": {
-        "pattern": r"DES\.new\(|DES3\.new\(|Cipher\.getInstance\(['\"]DES['\"]\)",
+        "pattern": r"DES\.new\(|DES3\.new\(",
         "severity": "CRITICAL",
         "type": "Deprecated Block Cipher (DES/3DES)",
         "crypto_technology": "Symmetric Block Cipher (DES)",
         "confidence": "HIGH",
         "explanation": "DES uses an obsolete 56-bit key size vulnerable to brute force in minutes.",
         "remediation": "Upgrade to AES-256-GCM or ChaCha20-Poly1305.",
+        "algorithm": "DES",
+        "usage_context": "symmetric_encryption",
+        "confidence_score": 0.95,
+        "key_size": 56,
     },
     "HARDCODED_RSA_KEY": {
-        "pattern": r"RSA\.generate\(\s*(1024|512)\b",
+        "pattern": r"RSA\.generate\(\s*(1024|512)",
         "severity": "HIGH",
         "type": "Weak RSA Key Generation (<2048 bits)",
         "crypto_technology": "Asymmetric Key Pair (RSA)",
         "confidence": "HIGH",
-        "explanation": "RSA key lengths under 2048 bits are vulnerable to classical factorization attacks.",
-        "remediation": "Increase RSA key size to at least 2048-bit (preferably 3072-bit) and plan PQC transition to ML-KEM-768.",
+        "explanation": "RSA key lengths under 2048 bits are vulnerable to classical factorization.",
+        "remediation": "Increase RSA key size to at least 2048-bit and plan PQC transition to ML-KEM-768.",
+        "algorithm": "RSA",
+        "usage_context": "key_exchange",
+        "confidence_score": 0.90,
+        "key_size": 1024,
     },
     "HARDCODED_PRIVATE_KEY": {
         "pattern": r"-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----",
@@ -58,19 +75,93 @@ CRYPTO_CODE_PATTERNS = {
         "type": "Hardcoded Cryptographic Private Key",
         "crypto_technology": "PKI Private Key Material",
         "confidence": "HIGH",
-        "explanation": "Hardcoded private keys embedded in source code can be extracted through version history.",
-        "remediation": "Remove key immediately from repository. Re-issue and inject credentials via KMS.",
+        "explanation": "Hardcoded private keys in source code can be extracted through version history.",
+        "remediation": "Remove key from repository. Re-issue and inject via KMS.",
+        "algorithm": "RSA",
+        "usage_context": "digital_signature",
+        "confidence_score": 0.99,
+        "key_size": None,
     },
     "HARDCODED_SECRET_STRING": {
-        "pattern": r"(?:api[_\-]?key|secret[_\-]?key|private[_\-]?key)\s*=\s*['\"][A-Za-z0-9+/=_\-]{16,}['\"]",
+        "pattern": r'''(?:api_key|secret_key|private_key)\s*=\s*['"][A-Za-z0-9+/=_\-]{16,}['"]''',
         "severity": "MEDIUM",
         "type": "Hardcoded Secret Key String",
         "crypto_technology": "Authentication Secret",
         "confidence": "MEDIUM",
         "explanation": "Potential plaintext credential or API secret hardcoded in source code.",
         "remediation": "Move secrets to .env, runtime configuration, or a vault solution.",
-    }
+        "algorithm": "HMAC",
+        "usage_context": "mac",
+        "confidence_score": 0.70,
+        "key_size": None,
+    },
+    "RSA_USAGE": {
+        "pattern": r"rsa\.generate_private_key|generate_private_key.*public_exponent",
+        "severity": "HIGH",
+        "type": "RSA Asymmetric Key Usage Detected",
+        "crypto_technology": "Asymmetric Key Pair (RSA)",
+        "confidence": "HIGH",
+        "explanation": "RSA is vulnerable to Shor algorithm on a CRQC. Plan ML-KEM/ML-DSA migration.",
+        "remediation": "Plan migration to ML-KEM-768 (key exchange) or ML-DSA-65 (signatures) per NIST FIPS 203/204.",
+        "algorithm": "RSA",
+        "usage_context": "key_exchange_or_signature",
+        "confidence_score": 0.88,
+        "key_size": 2048,
+    },
+    "ECC_USAGE": {
+        "pattern": r"ec\.generate_private_key|SECP256R1|SECP384R1|secp256k1",
+        "severity": "HIGH",
+        "type": "ECC Elliptic Curve Usage Detected",
+        "crypto_technology": "Elliptic Curve Cryptography (ECC)",
+        "confidence": "HIGH",
+        "explanation": "ECC/ECDSA is quantum-vulnerable - Shor algorithm breaks all discrete log problems.",
+        "remediation": "Migrate ECDSA to ML-DSA-65; ECDH to ML-KEM-768.",
+        "algorithm": "ECC",
+        "usage_context": "digital_signature",
+        "confidence_score": 0.88,
+        "key_size": 256,
+    },
+    "AES_WEAK_MODE": {
+        "pattern": r"AES\.new\(.*MODE_ECB|AES\.new\(.*MODE_CBC",
+        "severity": "MEDIUM",
+        "type": "AES in Weak or Unauthenticated Mode (ECB/CBC)",
+        "crypto_technology": "Symmetric Block Cipher (AES-CBC/ECB)",
+        "confidence": "HIGH",
+        "explanation": "AES-ECB leaks patterns; AES-CBC is malleable. Use AEAD modes.",
+        "remediation": "Replace with AES-256-GCM or ChaCha20-Poly1305.",
+        "algorithm": "AES-CBC",
+        "usage_context": "symmetric_encryption",
+        "confidence_score": 0.85,
+        "key_size": 128,
+    },
+    "INSECURE_TLS_CONFIG": {
+        "pattern": r"verify\s*=\s*False|ssl_verify\s*=\s*False|check_hostname\s*=\s*False|InsecureRequestWarning",
+        "severity": "CRITICAL",
+        "type": "TLS Certificate Verification Disabled in Code",
+        "crypto_technology": "TLS Certificate Validation",
+        "confidence": "HIGH",
+        "explanation": "Disabling TLS verification exposes connections to MITM attacks.",
+        "remediation": "Enable certificate verification. Never disable in production.",
+        "algorithm": "TLS",
+        "usage_context": "transport_security",
+        "confidence_score": 0.97,
+        "key_size": None,
+    },
+    "HARDCODED_CERT": {
+        "pattern": r"-----BEGIN CERTIFICATE-----",
+        "severity": "MEDIUM",
+        "type": "Hardcoded X.509 Certificate in Source Code",
+        "crypto_technology": "X.509 Certificate",
+        "confidence": "HIGH",
+        "explanation": "Embedding X.509 certificates in source code creates rotation issues.",
+        "remediation": "Store certificates outside VCS and inject at runtime.",
+        "algorithm": "RSA",
+        "usage_context": "digital_signature",
+        "confidence_score": 0.90,
+        "key_size": None,
+    },
 }
+
 
 def scan_source_code(content: str, filename: str = "snippet.py") -> List[Dict[str, Any]]:
     findings = []
@@ -95,9 +186,16 @@ def scan_source_code(content: str, filename: str = "snippet.py") -> List[Dict[st
                         "explanation": rule_data["explanation"],
                         "remediation": rule_data["remediation"],
                         "matched_pattern": rule_data["pattern"],
+                        # Phase 1 enriched fields
+                        "algorithm": rule_data.get("algorithm", "Unknown"),
+                        "usage_context": rule_data.get("usage_context", "unknown"),
+                        "confidence_score": rule_data.get("confidence_score", 0.7),
+                        "key_size": rule_data.get("key_size"),
+                        "source": "source_code",
                         "scanned_at": datetime.now(timezone.utc).isoformat()
                     })
     return findings
+
 
 # ==========================================
 # 2. Container & Dockerfile Scanner Rules
@@ -486,14 +584,20 @@ def scan_tls_target(
         }
 
 # ==========================================
-# 5. Inventory Importer
+# 5. Inventory Importers
 # ==========================================
 def import_finding_to_inventory(db: Session, finding_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Imports a scanned live target or finding into the enterprise inventory table.
+    Imports a scanned live TLS target or generic finding into the enterprise inventory.
+    Phase 1: preserves business_criticality, data_lifetime, source fields.
     """
     host = finding_data.get("host", "scanned.internal.net")
     port = int(finding_data.get("port", 443))
+
+    from app.services.pqc_engine import recommend_pqc
+    key_type = finding_data.get("cert_key_type", "RSA")
+    usage_ctx = finding_data.get("usage_context")
+    pqc_rec = recommend_pqc(key_type, usage_ctx, finding_data.get("cert_key_size_bits"))
 
     existing = db.query(CryptoAsset).filter(CryptoAsset.host == host, CryptoAsset.port == port).first()
     mwqrs = float(finding_data.get("risk_score", 50.0))
@@ -503,26 +607,38 @@ def import_finding_to_inventory(db: Session, finding_data: Dict[str, Any]) -> Di
             host=host,
             port=port,
             status=finding_data.get("status", "success"),
+            source=finding_data.get("source", "tls"),
+            business_criticality=finding_data.get("business_criticality", "medium"),
+            data_lifetime=finding_data.get("data_lifetime", "1-3y"),
             tls_version=finding_data.get("tls_version", "TLSv1.3"),
             cipher_suite=finding_data.get("cipher_suite", "TLS_AES_256_GCM_SHA384"),
             cipher_bits=finding_data.get("cipher_bits", 256),
             cert_subject=finding_data.get("cert_subject", f"CN={host}"),
             cert_issuer=finding_data.get("cert_issuer", "Discovered In-Scan Authority"),
-            cert_key_type=finding_data.get("cert_key_type", "RSA"),
+            cert_key_type=key_type,
             cert_key_size_bits=finding_data.get("cert_key_size_bits", 2048),
             cert_signature_algorithm=finding_data.get("cert_signature_algorithm", "sha256WithRSAEncryption"),
             days_to_expiry=finding_data.get("days_to_expiry", 180),
             risk_flags=json.dumps(finding_data.get("risk_flags", ["DISCOVERED_IN_SCAN"])),
             risk_score=mwqrs,
+            algorithm=finding_data.get("algorithm", key_type),
+            usage_context=usage_ctx,
+            confidence_score=finding_data.get("confidence_score"),
+            library=finding_data.get("library"),
+            pqc_recommendation=json.dumps(pqc_rec),
         )
         db.add(asset)
     else:
         existing.status = finding_data.get("status", existing.status)
+        existing.source = finding_data.get("source", existing.source or "tls")
+        existing.business_criticality = finding_data.get("business_criticality", existing.business_criticality)
+        existing.data_lifetime = finding_data.get("data_lifetime", existing.data_lifetime)
         existing.tls_version = finding_data.get("tls_version", existing.tls_version)
         existing.cert_key_type = finding_data.get("cert_key_type", existing.cert_key_type)
         existing.cert_key_size_bits = finding_data.get("cert_key_size_bits", existing.cert_key_size_bits)
         existing.risk_score = mwqrs
         existing.days_to_expiry = finding_data.get("days_to_expiry", existing.days_to_expiry)
+        existing.pqc_recommendation = json.dumps(pqc_rec)
 
     db.commit()
     return {
@@ -530,4 +646,107 @@ def import_finding_to_inventory(db: Session, finding_data: Dict[str, Any]) -> Di
         "host": host,
         "port": port,
         "risk_score": mwqrs
+    }
+
+
+def import_source_finding_to_inventory(
+    db: Session,
+    finding: Dict[str, Any],
+    repo_name: str = "source_repo",
+    service_name: Optional[str] = None,
+    business_criticality: str = "medium",
+    data_lifetime: str = "1-3y",
+) -> Dict[str, Any]:
+    """
+    Phase 1: Write a source-code scanner finding into the unified CryptoAsset
+    inventory with source='source_code'. Uses a synthetic host+port derived
+    from repo name + rule_id so each unique (file, rule) has one inventory entry.
+    """
+    from app.services.pqc_engine import recommend_pqc
+    from app.services.scoring import calculate_mwqrs
+
+    rule_id = finding.get("rule_id", "UNKNOWN")
+    file_path = finding.get("file_path", "unknown.py")
+    algorithm = finding.get("algorithm", finding.get("crypto_technology", "RSA"))
+    usage_ctx = finding.get("usage_context", "unknown")
+    confidence_score = float(finding.get("confidence_score", 0.7))
+    line_no = finding.get("line_number", 0)
+
+    # Synthetic host/port — unique per (repo, rule)
+    host = f"src.{repo_name.replace('/', '-').replace('.', '-')[:40]}.internal"
+    port_hash = int(hashlib.md5(f"{repo_name}:{rule_id}".encode()).hexdigest(), 16) % 10000
+    port = 40000 + port_hash
+
+    linked_service_id = None
+    if service_name:
+        svc = db.query(Service).filter(Service.name == service_name).first()
+        if svc:
+            linked_service_id = svc.id
+
+    pqc_rec = recommend_pqc(algorithm, usage_ctx)
+
+    severity = finding.get("severity", "MEDIUM")
+    risk_flags = [f"SRC_{rule_id}", f"SEVERITY_{severity}"]
+    if algorithm in {"RSA", "ECC", "DH", "DSA", "ECDSA"}:
+        risk_flags.append("QUANTUM_VULNERABLE_ALGO")
+
+    asset_record = {
+        "status": "success",
+        "cert_key_type": algorithm,
+        "cert_key_size_bits": finding.get("key_size"),
+        "tls_version": None,
+        "days_to_expiry": None,
+        "business_criticality": business_criticality,
+        "data_lifetime": data_lifetime,
+    }
+
+    svc_obj = db.get(Service, linked_service_id) if linked_service_id else None
+    svc_criticality = svc_obj.criticality if svc_obj else "P2"
+    mwqrs = calculate_mwqrs(asset_record, service_criticality=svc_criticality)
+
+    existing = db.query(CryptoAsset).filter(
+        CryptoAsset.host == host, CryptoAsset.port == port
+    ).first()
+
+    if not existing:
+        asset = CryptoAsset(
+            host=host,
+            port=port,
+            status="success",
+            source="source_code",
+            business_criticality=business_criticality,
+            data_lifetime=data_lifetime,
+            cert_key_type=algorithm,
+            cert_key_size_bits=finding.get("key_size"),
+            cert_subject=f"Source: {file_path}:{line_no}",
+            cert_issuer=f"Rule: {rule_id}",
+            algorithm=algorithm,
+            usage_context=usage_ctx,
+            confidence_score=confidence_score,
+            library=finding.get("library"),
+            file_path=file_path,
+            line_number=line_no,
+            risk_flags=json.dumps(risk_flags),
+            risk_score=mwqrs,
+            pqc_recommendation=json.dumps(pqc_rec),
+            linked_service_id=linked_service_id,
+        )
+        db.add(asset)
+    else:
+        # Refresh risk on re-scan
+        existing.source = "source_code"
+        existing.business_criticality = business_criticality
+        existing.data_lifetime = data_lifetime
+        existing.risk_score = mwqrs
+        existing.pqc_recommendation = json.dumps(pqc_rec)
+        existing.file_path = file_path
+        existing.line_number = line_no
+
+    db.commit()
+    return {
+        "status": "imported",
+        "host": host,
+        "port": port,
+        "risk_score": mwqrs,
+        "source": "source_code",
     }

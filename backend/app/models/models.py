@@ -44,6 +44,24 @@ class CryptoAsset(Base):
     risk_score = Column(Float, default=0.0)
     linked_service_id = Column(Integer, ForeignKey("services.id"), nullable=True)
 
+    # --- Phase 1: Multi-source discovery fields ---
+    # Discovery source: "tls" | "source_code" | "dependency" | "binary" | "container"
+    source = Column(String(50), default="tls", nullable=False)
+    # Business criticality (stored attribute — feeds MWQRS and remediation ordering)
+    business_criticality = Column(String(20), default="medium", nullable=True)  # critical|high|medium|low
+    # Data lifetime / shelf-life (feeds Mosca calculator directly)
+    data_lifetime = Column(String(20), default="1-3y", nullable=True)  # <1y|1-3y|3-5y|5-10y|>10y
+    # PQC recommendation JSON (output of the recommendation engine)
+    pqc_recommendation = Column(Text, nullable=True)  # JSON
+    # Enriched algorithm fields for non-TLS assets
+    algorithm = Column(String(255), nullable=True)    # e.g. "RSA-2048", "AES-128-CBC"
+    usage_context = Column(String(100), nullable=True)  # e.g. "digital_signature", "key_exchange"
+    confidence_score = Column(Float, nullable=True)    # 0.0 – 1.0
+    library = Column(String(255), nullable=True)       # e.g. "cryptography", "openssl"
+    # File-level metadata for source code findings
+    file_path = Column(Text, nullable=True)
+    line_number = Column(Integer, nullable=True)
+
     linked_service = relationship("Service", back_populates="assets")
 
     __table_args__ = (

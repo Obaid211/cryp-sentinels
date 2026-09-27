@@ -1,35 +1,111 @@
-import { useState, useCallback } from 'react';
-import { API_BASE_URL } from './config';
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { apiFetch } from './lib/api';
 import { Navbar } from './components/Navbar';
 import { LandingPage } from './components/LandingPage';
 import { ExecutiveDashboard } from './components/ExecutiveDashboard';
 import { CryptoAssetInventory } from './components/CryptoAssetInventory';
 import { RemediationCenter } from './components/RemediationCenter';
 import { ThreatTimeline } from './components/ThreatTimeline';
-import { ComplianceReadiness } from './components/ComplianceReadiness';
-import { CbomStudio } from './components/CbomStudio';
-import { DependencyGraph } from './components/DependencyGraph';
-import { PqcSimulator } from './components/PqcSimulator';
-import { ScannerSuite } from './components/ScannerSuite';
-import { ScanHistoryDiff } from './components/ScanHistoryDiff';
-import { CryptographicAssistant } from './components/CryptographicAssistant';
 import { TourWizard } from './components/TourWizard';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { LoginPage } from './components/LoginPage';
+import { createClient, getSession, signOut } from './lib/supabase';
 import type { DashboardData } from './components/ExecutiveDashboard';
 
+// Lazy-loaded heavy modules for optimal initial bundle footprint (< 300 kB)
+const DependencyGraph = lazy(() => import('./components/DependencyGraph').then(m => ({ default: m.DependencyGraph })));
+const PqcSimulator = lazy(() => import('./components/PqcSimulator').then(m => ({ default: m.PqcSimulator })));
+const ScannerSuite = lazy(() => import('./components/ScannerSuite').then(m => ({ default: m.ScannerSuite })));
+const ScanHistoryDiff = lazy(() => import('./components/ScanHistoryDiff').then(m => ({ default: m.ScanHistoryDiff })));
+const CryptographicAssistant = lazy(() => import('./components/CryptographicAssistant').then(m => ({ default: m.CryptographicAssistant })));
+const CbomStudio = lazy(() => import('./components/CbomStudio').then(m => ({ default: m.CbomStudio })));
+const ComplianceReadiness = lazy(() => import('./components/ComplianceReadiness').then(m => ({ default: m.ComplianceReadiness })));
+
+interface ToastState {
+  message: string;
+  type: 'info' | 'success' | 'error';
+}
+
+const TabFallback = () => (
+  <div className="mx-auto max-w-7xl p-12 text-center">
+    <div className="border border-[#e5e5e5] bg-white p-8 shadow-flat-sm inline-flex items-center gap-3 font-mono text-xs text-tertiary">
+      <div className="h-4 w-4 animate-spin border-2 border-primary border-t-transparent inline-block" />
+      <span>Loading module telemetry...</span>
+    </div>
+  </div>
+);
+
+// ---------------------------------------------------------------------------
+// Auth-aware routing.
+// `isLoggedIn` mirrors the live Supabase session (localStorage-persisted):
+//   • Bootstrapped once on mount via getSession().
+//   • Kept in sync by supabase.auth.onAuthStateChange, which also catches
+//     OAuth returns (Google/GitHub redirect back with a URL hash) and
+//     SIGNED_OUT events from any tab.
+// The dashboard route is gated so guests are bounced to the login page.
+// ---------------------------------------------------------------------------
 export function App() {
   const [currentTab, setCurrentTab] = useState<string>('landing');
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState<boolean>(false);
   const [mode, setMode] = useState<'LIVE' | 'CACHED' | 'OFFLINE'>('LIVE');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [isTourOpen, setIsTourOpen] = useState<boolean>(false);
+
+  const showToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  // ---- Live Supabase session bootstrap + subscription ----------------------
+  useEffect(() => {
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      try {
+        const session = await getSession();
+        if (!cancelled) {
+          setIsLoggedIn(Boolean(session?.user));
+          setCurrentUserEmail(session?.user?.email ?? null);
+        }
+      } catch (err) {
+        console.error('[App] session bootstrap failed:', err);
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    };
+
+    void bootstrap();
+
+    // Subscribe to auth changes: OAuth returns, token refreshes, sign-outs.
+    const supabase = createClient();
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      const user = session?.user;
+      setIsLoggedIn(Boolean(user));
+      setCurrentUserEmail(user?.email ?? null);
+      if (event === 'SIGNED_IN' && user) {
+        showToast(`✓ Welcome, ${user.email ?? 'Operator'}! Identity verified.`, 'success');
+        setCurrentTab((prev) => (prev === 'landing' || prev === 'login' ? 'dashboard' : prev));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      const { subscription } = data as { subscription: { unsubscribe: () => void } };
+      subscription.unsubscribe();
+    };
+  }, [showToast]);
 
   const fetchDashboardData = useCallback(async (currentMode: string) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/dashboard/summary?mode=${currentMode}`);
+      const response = await apiFetch(`/api/dashboard/summary?mode=${currentMode}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} failed to fetch dashboard summary`);
       }
@@ -43,62 +119,86 @@ export function App() {
     }
   }, []);
 
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  // Ensure telemetry is automatically loaded when the user enters the dashboard
+  useEffect(() => {
+    if (currentTab === 'dashboard' && !dashboardData && !loading) {
+      void fetchDashboardData(mode);
+    }
+  }, [currentTab, dashboardData, loading, mode, fetchDashboardData]);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
-
-  const handleSelectTab = (tab: string) => {
+  const handleSelectTab = useCallback((tab: string) => {
     setCurrentTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (tab === 'dashboard') {
       void fetchDashboardData(mode);
     }
-  };
+  }, [mode, fetchDashboardData]);
 
-  const handleModeChange = (newMode: 'LIVE' | 'CACHED' | 'OFFLINE') => {
+  const handleModeChange = useCallback((newMode: 'LIVE' | 'CACHED' | 'OFFLINE') => {
     setMode(newMode);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToast(`✓ Switched operational mode to ${newMode}`);
+    showToast(`✓ Switched operational mode to ${newMode}`, 'success');
     if (currentTab === 'dashboard') {
       void fetchDashboardData(newMode);
     }
-  };
+  }, [currentTab, fetchDashboardData, showToast]);
 
-  const handleRefreshData = async () => {
+  const handleRefreshData = useCallback(async () => {
     try {
-      await fetch(`${API_BASE_URL}/api/score/recalculate`, { method: 'POST' });
-      showToast('✓ MWQRS scores recalculated across all assets!');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      await apiFetch('/api/score/recalculate', { method: 'POST' });
+      showToast('✓ MWQRS scores recalculated across all assets!', 'success');
       if (currentTab === 'dashboard') {
         void fetchDashboardData(mode);
       }
     } catch (err) {
       console.error('Failed to recalculate:', err);
-      showToast('⚠️ Failed to recalculate scores.');
+      showToast('⚠️ Failed to recalculate scores.', 'error');
     }
-  };
+  }, [currentTab, mode, fetchDashboardData, showToast]);
 
-  const handleSeedDemo = async () => {
+  const handleSeedDemo = useCallback(async () => {
     try {
-      await fetch(`${API_BASE_URL}/api/demo/seed`, { method: 'POST' });
-      showToast('✓ Demo services and topological dependencies re-seeded!');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      await apiFetch('/api/demo/seed', { method: 'POST' });
+      showToast('✓ Demo services and topological dependencies re-seeded!', 'success');
       if (currentTab === 'dashboard') {
         void fetchDashboardData(mode);
       }
     } catch (err) {
       console.error('Failed to seed demo:', err);
-      showToast('⚠️ Failed to re-seed demo data.');
+      showToast('⚠️ Failed to re-seed demo data.', 'error');
     }
-  };
+  }, [currentTab, mode, fetchDashboardData, showToast]);
 
-  const handleDownloadReport = () => {
+  const handleDownloadReport = useCallback(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     window.open('/DETAILED_TEST_REPORT.md', '_blank');
-  };
+  }, []);
+
+  // ---- Navbar auth action: log in (open portal) or sign out ----------------
+  const handleAuthAction = useCallback(async () => {
+    if (isLoggedIn) {
+      const result = await signOut();
+      if (result.success) {
+        setIsLoggedIn(false);
+        setCurrentUserEmail(null);
+        showToast('✓ Signed out. Session cleared.', 'info');
+        if (currentTab === 'dashboard') setCurrentTab('landing');
+      } else {
+        showToast('⚠️ Sign-out failed — try again.', 'error');
+      }
+    } else {
+      setCurrentTab('login');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [isLoggedIn, currentTab, showToast]);
+
+  // ---- Fired by LoginPage once a confirmed session exists ------------------
+  const handleAuthSuccess = useCallback(() => {
+    setIsLoggedIn(true);
+    setCurrentTab('dashboard');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    void fetchDashboardData(mode);
+  }, [mode, fetchDashboardData]);
 
   return (
     <div className="min-h-screen bg-surface flex flex-col selection:bg-primary selection:text-white">
@@ -111,6 +211,9 @@ export function App() {
         onSeedDemo={handleSeedDemo}
         onDownloadReport={handleDownloadReport}
         onStartTour={() => setIsTourOpen(true)}
+        isLoggedIn={isLoggedIn}
+        userEmail={currentUserEmail}
+        onLogin={handleAuthAction}
       />
 
       {mode === 'CACHED' && (
@@ -120,7 +223,7 @@ export function App() {
             <span className="font-bold uppercase tracking-wider">⚡ CACHED OPERATIONAL MODE:</span>
             <span className="hidden sm:inline">Serving instant in-memory & local snapshot state (sub-millisecond latency, zero external network overhead).</span>
           </div>
-          <button 
+          <button
             onClick={() => handleModeChange('LIVE')}
             className="px-2 py-0.5 border border-amber-700 bg-amber-600 text-white font-bold text-[10px] uppercase hover:bg-amber-700 transition-colors"
           >
@@ -136,7 +239,7 @@ export function App() {
             <span className="font-bold uppercase tracking-wider">🔒 AIR-GAPPED OFFLINE MODE:</span>
             <span className="hidden sm:inline">All outbound network sockets & external AI APIs blocked. Sovereign local intelligence & air-gapped simulation active.</span>
           </div>
-          <button 
+          <button
             onClick={() => handleModeChange('LIVE')}
             className="px-2 py-0.5 border border-blue-800 bg-blue-700 text-white font-bold text-[10px] uppercase hover:bg-blue-800 transition-colors"
           >
@@ -147,18 +250,63 @@ export function App() {
 
       <ErrorBoundary>
         <main className="flex-1">
+          {/* Auth-aware routing: the login page is accessible to everyone;
+               the dashboard is gated so guests are redirected there. */}
           {currentTab === 'landing' ? (
             <LandingPage onExplore={(targetTab) => handleSelectTab(targetTab)} />
-          ) : currentTab === 'dashboard' ? (
-            <ExecutiveDashboard
-              data={dashboardData}
-              loading={loading}
-              error={error}
-              onNavigateToAsset={(host, port) => {
-                console.log(`Navigate to asset ${host}:${port}`);
-                handleSelectTab('inventory');
-              }}
+          ) : currentTab === 'login' ? (
+            <LoginPage
+              customHeader="Post-Quantum Identity Portal"
+              onAuthSuccess={handleAuthSuccess}
             />
+          ) : currentTab === 'dashboard' ? (
+            isLoggedIn ? (
+              <ExecutiveDashboard
+                data={dashboardData}
+                loading={loading}
+                error={error}
+                onRetry={() => void fetchDashboardData(mode)}
+                onNavigateToAsset={(host, port) => {
+                  console.log(`Navigate to asset ${host}:${port}`);
+                  handleSelectTab('inventory');
+                }}
+              />
+            ) : (
+              <div className="mx-auto max-w-7xl p-8 text-center">
+                <div className="border border-[#e5e5e5] bg-white p-12 shadow-flat-sm">
+                  <div className="flex flex-col items-center justify-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-none bg-[#faf9f5] border border-[#e5e5e5] text-2xl font-bold text-tertiary">
+                      <span style={{ fontFamily: "'Syne', sans-serif" }}>E</span>
+                    </div>
+                    <h2 className="font-display text-2xl font-bold uppercase text-secondary">
+                      Authenticated access required
+                    </h2>
+                    <p style={{ color: 'var(--text-tertiary)', margin: 0 }}>
+                      {authChecked
+                        ? 'Please sign in to continue.'
+                        : 'Restoring your session…'}
+                    </p>
+                    <button
+                      onClick={() => handleSelectTab('login')}
+                      style={{
+                        padding: '10px 16px',
+                        borderRadius: 0,
+                        border: '1px solid var(--accent)',
+                        background: 'var(--accent)',
+                        color: 'var(--on-primary)',
+                        fontFamily: 'Geist Mono, monospace',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Open Login
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
           ) : currentTab === 'inventory' ? (
             <CryptoAssetInventory />
           ) : currentTab === 'remediation' ? (
@@ -166,29 +314,43 @@ export function App() {
           ) : currentTab === 'threat-timeline' ? (
             <ThreatTimeline />
           ) : currentTab === 'dependency-graph' ? (
-            <div className="mx-auto max-w-7xl p-8">
-              <DependencyGraph />
-            </div>
+            <Suspense fallback={<TabFallback />}>
+              <div className="mx-auto max-w-7xl p-8">
+                <DependencyGraph />
+              </div>
+            </Suspense>
           ) : currentTab === 'pqc-simulator' ? (
-            <div className="mx-auto max-w-7xl p-8">
-              <PqcSimulator />
-            </div>
+            <Suspense fallback={<TabFallback />}>
+              <div className="mx-auto max-w-7xl p-8">
+                <PqcSimulator />
+              </div>
+            </Suspense>
           ) : currentTab === 'scanners' ? (
-            <div className="mx-auto max-w-7xl p-8">
-              <ScannerSuite mode={mode} />
-            </div>
+            <Suspense fallback={<TabFallback />}>
+              <div className="mx-auto max-w-7xl p-8">
+                <ScannerSuite mode={mode} />
+              </div>
+            </Suspense>
           ) : currentTab === 'history-diff' ? (
-            <div className="mx-auto max-w-7xl p-8">
-              <ScanHistoryDiff />
-            </div>
+            <Suspense fallback={<TabFallback />}>
+              <div className="mx-auto max-w-7xl p-8">
+                <ScanHistoryDiff />
+              </div>
+            </Suspense>
           ) : currentTab === 'assistant' ? (
-            <div className="mx-auto max-w-7xl p-8">
-              <CryptographicAssistant mode={mode} />
-            </div>
+            <Suspense fallback={<TabFallback />}>
+              <div className="mx-auto max-w-7xl p-8">
+                <CryptographicAssistant mode={mode} />
+              </div>
+            </Suspense>
           ) : currentTab === 'compliance' ? (
-            <ComplianceReadiness />
+            <Suspense fallback={<TabFallback />}>
+              <ComplianceReadiness />
+            </Suspense>
           ) : currentTab === 'cbom-studio' ? (
-            <CbomStudio />
+            <Suspense fallback={<TabFallback />}>
+              <CbomStudio />
+            </Suspense>
           ) : (
             <div className="mx-auto max-w-7xl p-8">
               <div className="border border-secondary bg-white p-8 shadow-flat">
@@ -222,10 +384,26 @@ export function App() {
       />
 
       {/* Floating System Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 border-2 border-secondary bg-white text-secondary px-4 py-3 font-mono text-xs font-bold shadow-flat">
-          <span className="h-2.5 w-2.5 bg-primary animate-pulse inline-block" />
-          <span>{toastMessage}</span>
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 border-2 bg-white px-4 py-3 font-mono text-xs font-bold shadow-flat ${
+          toast.type === 'success' ? 'border-severity-safe text-secondary' :
+          toast.type === 'error' ? 'border-severity-critical text-secondary' :
+          'border-secondary text-secondary'
+        }`}>
+          <span className={`h-2.5 w-2.5 inline-block ${
+            toast.type === 'success' ? 'bg-severity-safe' :
+            toast.type === 'error' ? 'bg-severity-critical animate-pulse' :
+            'bg-primary animate-pulse'
+          }`} />
+          <span>{toast.message}</span>
+        </div>
+      )}
+
+      {/* Floating Network Error Banner */}
+      {error && !toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 border-2 border-severity-critical bg-white text-secondary px-4 py-3 font-mono text-xs font-bold shadow-flat">
+          <span className="h-2.5 w-2.5 bg-severity-critical animate-pulse inline-block" />
+          <span>{error}</span>
         </div>
       )}
     </div>
@@ -233,4 +411,3 @@ export function App() {
 }
 
 export default App;
-

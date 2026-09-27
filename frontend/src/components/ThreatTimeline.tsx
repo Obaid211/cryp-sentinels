@@ -16,6 +16,9 @@ interface ThreatRanking {
   id: number;
   target: string;
   service: string;
+  source?: string;
+  business_criticality?: string;
+  data_lifetime?: string;
   criticality: string;
   shelf_life_years: number;
   migration_time_years: number;
@@ -24,6 +27,16 @@ interface ThreatRanking {
   verdict: string;
   mwqrs: number;
 }
+
+const SOURCE_BADGE_STYLE: Record<string, { label: string; className: string }> = {
+  source_code: { label: 'Source Code', className: 'text-violet-700 bg-violet-50 border-violet-200' },
+  dependency: { label: 'Dependency', className: 'text-amber-700 bg-amber-50 border-amber-200' },
+  container: { label: 'Container', className: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+  binary: { label: 'Binary', className: 'text-gray-700 bg-gray-50 border-gray-200' },
+  hsm: { label: 'Hardware HSM', className: 'text-purple-700 bg-purple-50 border-purple-200' },
+  cloud_kms: { label: 'Cloud KMS', className: 'text-sky-700 bg-sky-50 border-sky-200' },
+  tls: { label: 'TLS/Network', className: 'text-blue-700 bg-blue-50 border-blue-200' },
+};
 
 export const ThreatTimeline = () => {
   const [shelfLife, setShelfLife] = useState<number>(10.0);
@@ -241,49 +254,62 @@ export const ThreatTimeline = () => {
             <thead>
               <tr className="border-b border-secondary bg-[#faf9f5] text-tertiary uppercase">
                 <th className="py-2.5 px-3">TARGET</th>
+                <th className="py-2.5 px-3">SOURCE</th>
                 <th className="py-2.5 px-3">SERVICE</th>
                 <th className="py-2.5 px-3">TIER</th>
+                <th className="py-2.5 px-3">DATA LIFETIME</th>
                 <th className="py-2.5 px-3">SHELF-LIFE (Y)</th>
                 <th className="py-2.5 px-3">MIGRATION (X)</th>
                 <th className="py-2.5 px-3">COMBINED</th>
-                <th className="py-2.5 px-3">HEADROOM (Z - [X+Y])</th>
+                <th className="py-2.5 px-3">HEADROOM</th>
                 <th className="py-2.5 px-3 text-right">VERDICT</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-6 text-center text-tertiary">Loading rankings...</td>
+                  <td colSpan={10} className="py-6 text-center text-tertiary">Loading rankings...</td>
                 </tr>
               ) : (
-                rankings.map((r) => (
-                  <tr key={r.id} className="border-b border-[#eeeeea] hover:bg-[#faf9f5]">
-                    <td className="py-3 px-3 font-bold text-secondary">{r.target}</td>
-                    <td className="py-3 px-3 text-secondary">{r.service}</td>
-                    <td className="py-3 px-3">
-                      <span className="border border-[#e5e5e5] bg-white px-2 py-0.5 font-bold text-secondary">
-                        {r.criticality}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-tertiary">{r.shelf_life_years}y</td>
-                    <td className="py-3 px-3 text-tertiary">{r.migration_time_years}y</td>
-                    <td className="py-3 px-3 font-bold text-secondary">{r.combined_years}y</td>
-                    <td className="py-3 px-3">
-                      <span className={r.margin_years < 0 ? 'text-severity-critical font-bold' : 'text-severity-safe font-bold'}>
-                        {r.margin_years > 0 ? `+${r.margin_years}` : r.margin_years}y
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <span className={`px-2 py-0.5 font-bold border ${
-                        r.verdict === 'CRITICAL'
-                          ? 'border-severity-critical bg-white text-severity-critical'
-                          : 'border-severity-safe bg-white text-severity-safe'
-                      }`}>
-                        {r.verdict}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                rankings.map((r) => {
+                  const badge = SOURCE_BADGE_STYLE[r.source || 'tls'] || SOURCE_BADGE_STYLE.tls;
+                  return (
+                    <tr key={r.id} className="border-b border-[#eeeeea] hover:bg-[#faf9f5]">
+                      <td className="py-3 px-3 font-bold text-secondary max-w-[200px] truncate" title={r.target}>
+                        {r.target}
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span className={`border px-2 py-0.5 font-bold text-[10px] uppercase ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-secondary">{r.service}</td>
+                      <td className="py-3 px-3">
+                        <span className="border border-[#e5e5e5] bg-white px-2 py-0.5 font-bold text-secondary">
+                          {r.criticality}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-tertiary font-semibold">{r.data_lifetime || '1-3y'}</td>
+                      <td className="py-3 px-3 text-tertiary">{r.shelf_life_years}y</td>
+                      <td className="py-3 px-3 text-tertiary">{r.migration_time_years}y</td>
+                      <td className="py-3 px-3 font-bold text-secondary">{r.combined_years}y</td>
+                      <td className="py-3 px-3">
+                        <span className={r.margin_years < 0 ? 'text-severity-critical font-bold' : 'text-severity-safe font-bold'}>
+                          {r.margin_years > 0 ? `+${r.margin_years}` : r.margin_years}y
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <span className={`px-2 py-0.5 font-bold border ${
+                          r.verdict === 'CRITICAL'
+                            ? 'border-severity-critical bg-white text-severity-critical'
+                            : 'border-severity-safe bg-white text-severity-safe'
+                        }`}>
+                          {r.verdict}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

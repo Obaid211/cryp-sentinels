@@ -37,9 +37,9 @@ RUN apt-get update && apt-get install -y openssl
     data = response.json()
     assert data["findings_count"] >= 3
     rule_ids = [f["rule_id"] for f in data["findings"]]
-    assert "CONTAINER_DEPRECATED_BASE_IMAGE" in rule_ids
-    assert "CONTAINER_TLS_VERIFY_DISABLED" in rule_ids
-    assert "CONTAINER_HARDCODED_KEY" in rule_ids
+    assert "CNT_DEPRECATED_BASE_IMAGE" in rule_ids
+    assert "CNT_TLS_VERIFY_DISABLED" in rule_ids
+    assert "CNT_EMBEDDED_PRIVATE_KEY" in rule_ids
 
 
 def test_api_scanner_jwt_rsa():

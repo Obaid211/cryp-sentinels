@@ -149,7 +149,17 @@ python -m pytest tests/ -v
 ```
 *Expected: 29 passed in <5.0s, 0 failures.*
 
-### 2. Frontend Typecheck
+### 2. Multi-Source Pipeline End-to-End Verifications
+Validates Phase 1, Phase 2, and Phase 3 scanners and full cross-system synchronization:
+```bash
+cd backend
+python verify_phase1_end_to_end.py   # Source code + Dependencies + Criticality + Mosca
+python test_phase2.py                # Binary (ELF/PE/Mach-O) + Container scanner + Diffs
+python test_phase3.py                # Hardware HSM (PKCS#11) + Cloud KMS (AWS/Azure/GCP)
+```
+*Expected: 100% pass across all verification stages.*
+
+### 3. Frontend Typecheck
 Validates strict TypeScript types with `verbatimModuleSyntax` conformance:
 ```bash
 cd frontend
@@ -157,7 +167,7 @@ npx tsc --noEmit
 ```
 *Expected: Exits code 0 with 0 errors.*
 
-### 3. Frontend Linter
+### 4. Frontend Linter
 Validates lint rules using Oxlint:
 ```bash
 cd frontend
@@ -165,13 +175,16 @@ npm run lint
 ```
 *Expected: 0 errors across all 20+ source files.*
 
-### 4. Production Bundle Build
+### 5. Production Bundle Build
 Validates Vite bundler tree-shaking, CSS token compilation, and Rollup minification:
 ```bash
 cd frontend
 npm run build
 ```
-*Expected: Clean output in `frontend/dist/` with 0 compile errors.*
+*Expected: Clean output in `frontend/dist/` with 0 compile errors (105 kB entry chunk).*
+
+### 6. Automated GitHub Actions CI/CD
+Automated pipeline configured at [`.github/workflows/ci.yml`](file:///d:/ReactProj/.github/workflows/ci.yml) validating all backend tests, Phase 1-3 verification scripts, frontend typechecking, linting, Vite build, and Docker multi-stage image builds on every pull request and push to `main`.
 
 ---
 
@@ -221,6 +234,55 @@ curl -X POST http://127.0.0.1:8000/api/snapshots/save \
 | `Postgres connection refused` | Postgres container initializing | Ensure Docker Compose healthchecks pass before backend connects (`condition: service_healthy`). |
 | `TypeError: verbatimModuleSyntax` | Type imported as value in TSX | Use `import type { Foo } from '...'` syntax. |
 | `Gemini quota exceeded (429)` | External rate limit | Built-in Sovereign Cryptographic Expert Engine automatically engages as fallback with zero user disruption. |
+
+---
+
+## 8. Enabling OAuth Login
+
+ECDAT authenticates users via Supabase Auth (supporting Google OAuth, GitHub OAuth, and Email+Password). OAuth providers are activated and managed in the **Supabase Dashboard**, not directly in application code.
+
+### Step-by-Step Configuration:
+
+1. **Create/Access Supabase Project**:
+   - Navigate to [https://supabase.com](https://supabase.com) and create or open your project.
+   - Go to **Project Settings → API** and obtain:
+     - **Project URL** (`https://<project-ref>.supabase.co`)
+     - **anon public API key**
+
+2. **Configure OAuth Providers in Supabase**:
+   Navigate to **Authentication → Sign In / Providers**:
+   - **Google**:
+     - Toggle **Enable Sign in with Google**.
+     - Create an OAuth 2.0 Client ID in [Google Cloud Console](https://console.cloud.google.com/) (**APIs & Services → Credentials → Create Credentials → OAuth Client ID**).
+     - Set Application Type to **Web application**.
+     - Set **Authorized redirect URI** to:
+       `https://<project-ref>.supabase.co/auth/v1/callback`
+     - Copy the **Client ID** and **Client Secret** into the Supabase Dashboard and click **Save**.
+   - **GitHub**:
+     - Toggle **Enable Sign in with GitHub**.
+     - In GitHub, go to **Settings → Developer settings → OAuth Apps → New OAuth App**.
+     - Set **Homepage URL** to your frontend origin (e.g. `http://localhost:5173` or `https://your-domain.vercel.app`).
+     - Set **Authorization callback URL** to:
+       `https://<project-ref>.supabase.co/auth/v1/callback`
+     - Copy the resulting **Client ID** and **Client Secret** into the Supabase Dashboard and click **Save**.
+
+3. **Configure URL & Redirect Allowlist**:
+   Navigate to **Authentication → URL Configuration**:
+   - **Site URL**: `http://localhost:5173` (for local dev) or your production domain (`https://your-domain.vercel.app`).
+   - **Redirect URLs**: Add:
+     - `http://localhost:5173/**`
+     - `https://your-domain.vercel.app/**`
+
+4. **Set Frontend Environment Variables**:
+   In `frontend/.env` (local) or Vercel Project Settings (production):
+   ```bash
+   VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+   VITE_SUPABASE_ANON_KEY=<your-anon-public-key>
+   VITE_AUTH_REDIRECT_URL=http://localhost:5173/   # or https://your-domain.vercel.app/
+   ```
+
+5. **Rebuild / Redeploy Frontend**:
+   Because Vite inlines `VITE_*` environment variables during `npm run build`, trigger a redeploy or run `npm run build` after updating credentials.
 
 ---
 

@@ -1,3 +1,37 @@
-backend/.env
+# Environment variables
 .env
+.env.local
+.env.*.local
+*.env
 backend/.env
+frontend/.env
+
+# Python virtual environment & caches
+.venv/
+backend/.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.db
+backend/ecdat.db
+
+# Node & Frontend dependencies/build
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE & Tool caches
+.claude/
+.gemini/
+.superdesign/
+.vscode/
+.idea/
+*.log
+repomix-output.xml

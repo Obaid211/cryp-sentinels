@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.models import CryptoAsset, Service, ServiceDependency
 from app.services.cbom import get_recommended_pqc_target, explain_risk_flag, generate_cyclonedx_cbom
-from app.services.scoring import QUANTUM_VULNERABLE_ALGORITHMS
+from app.services.scoring import QUANTUM_VULNERABLE_ALGORITHMS, get_mosca_shelf_life_years
 
 router = APIRouter()
 
@@ -40,11 +40,24 @@ def get_inventory(
             except Exception:
                 flags = [a.risk_flags]
 
+        # Load PQC recommendation from stored field or compute live
+        pqc_data = None
+        if a.pqc_recommendation:
+            try:
+                pqc_data = json.loads(a.pqc_recommendation)
+            except Exception:
+                pass
+        if not pqc_data:
+            pqc_data = get_recommended_pqc_target(a.cert_key_type or a.algorithm or "RSA")
+
         results.append({
             "id": a.id,
             "host": a.host,
             "port": a.port,
             "status": a.status,
+            "source": a.source or "tls",
+            "business_criticality": a.business_criticality or "medium",
+            "data_lifetime": a.data_lifetime or "1-3y",
             "tls_version": a.tls_version,
             "cipher_suite": a.cipher_suite,
             "cipher_bits": a.cipher_bits,
@@ -53,12 +66,19 @@ def get_inventory(
             "cert_key_type": a.cert_key_type,
             "cert_key_size_bits": a.cert_key_size_bits,
             "cert_signature_algorithm": a.cert_signature_algorithm,
+            "algorithm": a.algorithm or a.cert_key_type,
+            "usage_context": a.usage_context,
+            "library": a.library,
+            "file_path": a.file_path,
+            "line_number": a.line_number,
+            "confidence_score": a.confidence_score,
             "days_to_expiry": a.days_to_expiry,
             "criticality": crit,
             "service_name": svc_name,
             "risk_score": a.risk_score,
             "risk_flags": flags,
-            "pqc_target": get_recommended_pqc_target(a.cert_key_type)["algorithm"]
+            "pqc_target": pqc_data.get("recommendation", pqc_data.get("algorithm", "ML-KEM-768")),
+            "pqc_recommendation": pqc_data,
         })
 
     results.sort(key=lambda x: x["risk_score"], reverse=True)
@@ -146,6 +166,9 @@ def get_remediation_plan(db: Session = Depends(get_db)):
         # Multi-factor priority index
         priority_index = mwqrs * 1.0
         priority_index += {"P0": 25.0, "P1": 15.0, "P2": 5.0, "P3": 0.0}.get(crit, 0.0)
+        biz_crit = (a.business_criticality or "medium").lower()
+        priority_index += {"critical": 20.0, "high": 12.0, "medium": 5.0, "low": 0.0}.get(biz_crit, 5.0)
+
         if days_exp is not None:
             if days_exp < 0:
                 priority_index += 40.0
@@ -162,6 +185,9 @@ def get_remediation_plan(db: Session = Depends(get_db)):
             reasons.append(f"Critical MWQRS quantum risk score ({mwqrs}/100)")
         elif mwqrs >= 50.0:
             reasons.append(f"Elevated MWQRS risk score ({mwqrs}/100)")
+
+        if biz_crit in ["critical", "high"]:
+            reasons.append(f"Asset business criticality classified as {biz_crit.upper()}")
 
         if crit in ["P0", "P1"]:
             reasons.append(f"Tier {crit} Mission-critical sovereign service")
@@ -193,12 +219,29 @@ def get_remediation_plan(db: Session = Depends(get_db)):
             actions.append("Review: Audit cipher configuration and eliminate legacy algorithms.")
             migration_direction = "Legacy Classical → Modern Classical → Hybrid PQC"
 
+        # Load PQC recommendation for this asset
+        pqc_data = None
+        if a.pqc_recommendation:
+            try:
+                pqc_data = json.loads(a.pqc_recommendation)
+            except Exception:
+                pass
+        if not pqc_data:
+            from app.services.pqc_engine import recommend_pqc
+            pqc_data = recommend_pqc(key_type)
+
         plan_items.append({
             "asset_id": a.id,
             "target": f"{a.host}:{a.port}",
             "host": a.host,
             "port": a.port,
             "service": svc_name,
+            "source": a.source or "tls",
+            "business_criticality": a.business_criticality or "medium",
+            "data_lifetime": a.data_lifetime or "1-3y",
+            "library": a.library,
+            "usage_context": a.usage_context,
+            "file_path": a.file_path,
             "criticality": crit,
             "algorithm": key_type,
             "key_size": key_size,
@@ -208,7 +251,11 @@ def get_remediation_plan(db: Session = Depends(get_db)):
             "priority_index": priority_index,
             "why_prioritized": "; ".join(reasons) + ".",
             "recommended_actions": actions,
-            "migration_direction": migration_direction,
+            "migration_direction": pqc_data.get("recommendation", migration_direction),
+            "hybrid_alternative": pqc_data.get("hybrid_alternative", ""),
+            "migration_complexity": pqc_data.get("migration_complexity", "Medium"),
+            "migration_cost": pqc_data.get("migration_cost", "Medium"),
+            "latency_impact": pqc_data.get("latency_impact", "Moderate"),
             "dependency_impact": "Downstream Service Impact Analyzed"
         })
 
@@ -284,20 +331,27 @@ def get_inventory_threat_rankings(
     assets = db.query(CryptoAsset).all()
     rankings = []
     for a in assets:
-        key_type = a.cert_key_type or "Unknown"
+        key_type = a.cert_key_type or a.algorithm or "Unknown"
         is_vuln = any(v.lower() in key_type.lower() for v in QUANTUM_VULNERABLE_ALGORITHMS)
         crit = a.linked_service.criticality if a.linked_service else "P2"
-        shelf_life = 20.0 if crit == "P0" else 10.0 if crit == "P1" else 3.0
+        # Phase 1: Use stored data_lifetime for Mosca shelf-life (instead of hardcoded defaults)
+        data_lifetime = a.data_lifetime or "1-3y"
+        shelf_life = get_mosca_shelf_life_years(data_lifetime)
+        # Migration time still based on criticality tier (engineering capacity)
         mig_time = 4.0 if crit == "P0" else 3.0 if crit == "P1" else 1.5
 
         combined = round(shelf_life + mig_time, 1)
         margin = round(planning_horizon - combined, 1)
         verdict = "CRITICAL" if (combined > planning_horizon and is_vuln) else "OK"
 
+        target_str = f"{a.host}:{a.port}" if a.port and a.port > 0 else a.host
         rankings.append({
             "id": a.id,
-            "target": f"{a.host}:{a.port}",
+            "target": target_str,
             "service": a.linked_service.name if a.linked_service else "Unassigned",
+            "source": a.source or "tls",
+            "business_criticality": a.business_criticality or "medium",
+            "data_lifetime": a.data_lifetime or "1-3y",
             "criticality": crit,
             "shelf_life_years": shelf_life,
             "migration_time_years": mig_time,

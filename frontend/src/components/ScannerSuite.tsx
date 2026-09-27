@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL } from '../config';
 
-type ScannerTab = 'TLS' | 'CODE' | 'CONTAINER' | 'API';
+type ScannerTab = 'TLS' | 'CODE' | 'DEPENDENCY' | 'CONTAINER' | 'BINARY' | 'HSM' | 'CLOUD_KMS' | 'API';
 
 interface TlsScanResult {
   host: string;
@@ -122,6 +122,75 @@ CMD ["./server"]
 const PRESET_JWT_RS256 = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwicm9sZSI6ImFkbWluIn0.signature';
 const PRESET_JWT_PQC = 'eyJhbGciOiJNTC1EU0EtNjUiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJzb3ZlcmVpZ24tdXNlciIsInJvbGUiOiJhdXRoIn0.pqc_sig';
 
+const PRESET_BIN_OPENSSL = `ELF\\x02\\x01\\x01\\x00
+OpenSSL 3.0.2 15 Mar 2022
+RSA_generate_key_ex
+RSA_public_encrypt
+EVP_PKEY_RSA
+EC_KEY_new
+ECDSA_do_sign
+libcrypto.so.3
+PKCS#8
+`;
+
+const PRESET_BIN_PQC = `ELF\\x02\\x01\\x01\\x00
+OQS_KEM_new
+OQS_KEM_alg_ml_kem_768
+ML-KEM-768
+OQS_SIG_alg_ml_dsa_65
+ML-DSA-65
+liboqs.so.0
+`;
+
+const PRESET_BIN_LIBSODIUM = `ELF\\x02\\x01\\x01\\x00
+sodium_init
+crypto_secretbox_easy
+crypto_sign_ed25519
+crypto_box_curve25519xsalsa20poly1305
+libsodium.so.23
+`;
+
+const PRESET_HSM_LUNA = `slot = 1
+token_label = "Production Sovereign Root PKCS#11 Token"
+library = "/usr/lib/libCryptoki2_64.so"
+vendor = "Thales Luna PCIe HSM"
+fips_mode = "FIPS 140-2 Level 3"
+mechanisms = "CKM_RSA_PKCS_KEY_PAIR_GEN,CKM_RSA_PKCS,CKM_ECDSA_KEY_PAIR_GEN,CKM_AES_GCM"
+`;
+
+const PRESET_HSM_YUBI = `slot = 0
+token_label = "YubiHSM2 Auth Token"
+connector = "http://127.0.0.1:12345"
+vendor = "Yubico YubiHSM 2"
+mechanisms = "RSA_2048,ECDSA_P256,ED25519,AES_128_CCM"
+`;
+
+const PRESET_CLOUD_KMS = `{
+  "Keys": [
+    {
+      "KeyId": "arn:aws:kms:us-east-1:123456789012:key/auth-token-signing-key",
+      "KeySpec": "RSA_2048",
+      "KeyUsage": "SIGN_VERIFY",
+      "Rotation": true,
+      "Description": "Production JWT Token Root Authority"
+    },
+    {
+      "KeyId": "arn:aws:kms:us-east-1:123456789012:key/payment-envelope-kek",
+      "KeySpec": "SYMMETRIC_DEFAULT",
+      "KeyUsage": "ENCRYPT_DECRYPT",
+      "Rotation": true,
+      "Description": "Cardholder Data Envelope Key"
+    },
+    {
+      "KeyId": "arn:aws:kms:us-east-1:123456789012:key/inter-service-identity-key",
+      "KeySpec": "ECC_NIST_P256",
+      "KeyUsage": "SIGN_VERIFY",
+      "Rotation": false,
+      "Description": "Mutual Service Authentication Signature Key"
+    }
+  ]
+}`;
+
 interface ScannerSuiteProps {
   mode?: 'LIVE' | 'CACHED' | 'OFFLINE';
 }
@@ -142,10 +211,48 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
   const [codeFindings, setCodeFindings] = useState<FindingItem[]>([]);
   const [codeLoading, setCodeLoading] = useState(false);
 
+  // Dependency Scan State (Phase 1)
+  const [depContent, setDepContent] = useState(`cryptography==41.0.3
+pyopenssl>=22.0.0
+pycryptodome==3.19.0
+jwt==1.3.1
+bcrypt==4.0.1
+paramiko==3.3.1
+argon2-cffi==23.1.0
+`);
+  const [depFilename, setDepFilename] = useState('requirements.txt');
+  const [depFindings, setDepFindings] = useState<Record<string, unknown>[]>([]);
+  const [depLoading, setDepLoading] = useState(false);
+  const [depImportStatus, setDepImportStatus] = useState<string | null>(null);
+
   // Container Scan State
   const [dockerContent, setDockerContent] = useState(PRESET_DOCKER_VULN);
   const [dockerFindings, setDockerFindings] = useState<FindingItem[]>([]);
   const [dockerLoading, setDockerLoading] = useState(false);
+  const [containerImportStatus, setContainerImportStatus] = useState<string | null>(null);
+
+  // Binary Scan State (Phase 2)
+  const [binContent, setBinContent] = useState(PRESET_BIN_OPENSSL);
+  const [binFilename, setBinFilename] = useState('libauth_crypto.so');
+  const [binFindings, setBinFindings] = useState<Record<string, unknown>[]>([]);
+  const [binLoading, setBinLoading] = useState(false);
+  const [binImportStatus, setBinImportStatus] = useState<string | null>(null);
+  const [binLibraries, setBinLibraries] = useState<string[]>([]);
+  const [binFormat, setBinFormat] = useState<string | null>(null);
+
+  // HSM Scan State (Phase 3)
+  const [hsmContent, setHsmContent] = useState(PRESET_HSM_LUNA);
+  const [hsmFilename, setHsmFilename] = useState('pkcs11.conf');
+  const [hsmFindings, setHsmFindings] = useState<Record<string, unknown>[]>([]);
+  const [hsmLoading, setHsmLoading] = useState(false);
+  const [hsmImportStatus, setHsmImportStatus] = useState<string | null>(null);
+
+  // Cloud KMS Scan State (Phase 3)
+  const [kmsContent, setKmsContent] = useState(PRESET_CLOUD_KMS);
+  const [kmsFilename, setKmsFilename] = useState('cloud_kms_keys.json');
+  const [kmsFindings, setKmsFindings] = useState<Record<string, unknown>[]>([]);
+  const [kmsLoading, setKmsLoading] = useState(false);
+  const [kmsImportStatus, setKmsImportStatus] = useState<string | null>(null);
 
   // API Scan State
   const [apiUrl, setApiUrl] = useState('https://api.internal.net/v1/auth/token');
@@ -233,16 +340,23 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
     }
   };
 
-  // Run Code scan
+  // Run Code scan (Phase 1: use /api/phase1/scan/source-code → imports to inventory)
   const handleCodeScan = async () => {
     setCodeLoading(true);
     triggerScanStream(`AST Scanner: ${codeFilename}`);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/scanners/code`, {
+      const res = await fetch(`${API_BASE_URL}/api/phase1/scan/source-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: codeContent, filename: codeFilename }),
+        body: JSON.stringify({
+          content: codeContent,
+          filename: codeFilename,
+          repo_name: codeFilename.replace('.py', '').replace('.js', ''),
+          import_to_inventory: true,
+          business_criticality: 'high',
+          data_lifetime: '3-5y',
+        }),
       });
       const data = await res.json();
       setCodeFindings(data.findings || []);
@@ -253,23 +367,160 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
     }
   };
 
-  // Run Container scan
+  // Run Dependency scan (Phase 1)
+  const handleDepScan = async () => {
+    setDepLoading(true);
+    setDepImportStatus(null);
+    triggerScanStream(`Dependency Scanner: ${depFilename}`);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/phase1/scan/dependency`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: depContent,
+          filename: depFilename,
+          import_to_inventory: true,
+          business_criticality: 'high',
+          data_lifetime: '3-5y',
+        }),
+      });
+      const data = await res.json();
+      setDepFindings(data.findings || []);
+      if (data.inventory_imported > 0) {
+        setDepImportStatus(`✓ ${data.inventory_imported} library assets imported to Inventory`);
+      }
+    } catch (err) {
+      console.error('Dependency scan error:', err);
+    } finally {
+      setDepLoading(false);
+    }
+  };
+
+
+  // Run Container scan (Phase 2: imports to inventory with source="container")
   const handleContainerScan = async () => {
     setDockerLoading(true);
+    setContainerImportStatus(null);
     triggerScanStream('Dockerfile Build Layers');
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/scanners/container`, {
+      const res = await fetch(`${API_BASE_URL}/api/phase2/scan/container`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: dockerContent, filename: 'Dockerfile' }),
+        body: JSON.stringify({
+          content: dockerContent,
+          filename: 'Dockerfile',
+          container_name: 'auth-microservice-img',
+          service_name: 'Auth-Service',
+          import_to_inventory: true,
+          business_criticality: 'high',
+          data_lifetime: '1-3y',
+        }),
       });
       const data = await res.json();
       setDockerFindings(data.findings || []);
+      if (data.inventory_imported > 0) {
+        setContainerImportStatus(`✓ ${data.inventory_imported} container finding(s) imported to Inventory (source: container)`);
+      }
     } catch (err) {
       console.error('Container scan error:', err);
     } finally {
       setDockerLoading(false);
+    }
+  };
+
+  // Run Binary scan (Phase 2: static inspection of binary symbols -> inventory)
+  const handleBinaryScan = async () => {
+    setBinLoading(true);
+    setBinImportStatus(null);
+    triggerScanStream(`Binary Symbol Scanner: ${binFilename}`);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/phase2/scan/binary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content_text: binContent,
+          filename: binFilename,
+          service_name: 'Auth-Service',
+          import_to_inventory: true,
+          business_criticality: 'critical',
+          data_lifetime: '5-10y',
+        }),
+      });
+      const data = await res.json();
+      setBinFindings(data.findings || []);
+      setBinLibraries(data.libraries_detected || []);
+      setBinFormat(data.file_format || null);
+      if (data.inventory_imported > 0) {
+        setBinImportStatus(`✓ ${data.inventory_imported} binary finding(s) imported to Inventory (source: binary)`);
+      }
+    } catch (err) {
+      console.error('Binary scan error:', err);
+    } finally {
+      setBinLoading(false);
+    }
+  };
+
+  // Run HSM scan (Phase 3)
+  const handleHsmScan = async () => {
+    setHsmLoading(true);
+    setHsmImportStatus(null);
+    triggerScanStream(`Hardware HSM Prober: ${hsmFilename}`);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/phase3/scan/hsm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: hsmContent,
+          filename: hsmFilename,
+          service_name: 'Payment-Gateway',
+          import_to_inventory: true,
+          business_criticality: 'critical',
+          data_lifetime: '5-10y',
+        }),
+      });
+      const data = await res.json();
+      setHsmFindings(data.findings || []);
+      if (data.inventory_imported > 0) {
+        setHsmImportStatus(`✓ ${data.inventory_imported} HSM cryptographic mechanism(s) imported to Inventory (source: hsm)`);
+      }
+    } catch (err) {
+      console.error('HSM scan error:', err);
+    } finally {
+      setHsmLoading(false);
+    }
+  };
+
+  // Run Cloud KMS scan (Phase 3)
+  const handleCloudKmsScan = async () => {
+    setKmsLoading(true);
+    setKmsImportStatus(null);
+    triggerScanStream(`Cloud KMS Auditor: ${kmsFilename}`);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/phase3/scan/cloud-kms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: kmsContent,
+          filename: kmsFilename,
+          service_name: 'Core-Database-Proxy',
+          import_to_inventory: true,
+          business_criticality: 'critical',
+          data_lifetime: '5-10y',
+        }),
+      });
+      const data = await res.json();
+      setKmsFindings(data.findings || []);
+      if (data.inventory_imported > 0) {
+        setKmsImportStatus(`✓ ${data.inventory_imported} Cloud KMS key(s) imported to Inventory (source: cloud_kms)`);
+      }
+    } catch (err) {
+      console.error('Cloud KMS scan error:', err);
+    } finally {
+      setKmsLoading(false);
     }
   };
 
@@ -321,8 +572,12 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
             [
               { id: 'TLS', label: '1. Live TLS' },
               { id: 'CODE', label: '2. Source AST' },
-              { id: 'CONTAINER', label: '3. Dockerfile' },
-              { id: 'API', label: '4. API & JWT' },
+              { id: 'DEPENDENCY', label: '3. Dependencies' },
+              { id: 'CONTAINER', label: '4. Dockerfile' },
+              { id: 'BINARY', label: '5. Binary' },
+              { id: 'HSM', label: '6. Hardware HSM' },
+              { id: 'CLOUD_KMS', label: '7. Cloud KMS' },
+              { id: 'API', label: '8. API & JWT' },
             ] as const
           ).map((tab) => (
             <button
@@ -628,7 +883,112 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
             </div>
           )}
 
-          {/* TAB 3: CONTAINER SCANNER */}
+          {/* TAB 3: DEPENDENCY SCANNER (Phase 1) */}
+          {activeTab === 'DEPENDENCY' && (
+            <div className="border border-[var(--border)] bg-[var(--surface)] p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+                <div>
+                  <h2 className="font-display text-base font-bold uppercase text-[var(--text-primary)]">
+                    Dependency / Library Scanner
+                  </h2>
+                  <p className="text-[11px] font-mono text-[var(--text-muted)] mt-0.5">
+                    Phase 1 · Parses requirements.txt, package.json, go.mod, Cargo.toml, pom.xml, build.gradle
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono text-[var(--text-muted)]">Manifest type:</span>
+                  {['requirements.txt', 'package.json', 'go.mod', 'Cargo.toml', 'pom.xml', 'build.gradle'].map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setDepFilename(f)}
+                      className={`font-mono text-[10px] px-2 py-0.5 border transition-colors ${
+                        depFilename === f
+                          ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
+                          : 'border-[var(--border)] bg-[var(--surface-raised)] hover:bg-[var(--text-primary)] hover:text-[var(--surface)]'
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1 font-mono text-xs">
+                <label className="text-[10px] uppercase text-[var(--text-muted)] font-bold">
+                  Manifest Content — {depFilename}
+                </label>
+                <textarea
+                  rows={8}
+                  value={depContent}
+                  onChange={(e) => setDepContent(e.target.value)}
+                  className="w-full border border-[var(--border)] bg-[#1e1e1e] text-[#d4d4d4] p-3 font-mono text-xs leading-relaxed outline-none"
+                />
+              </div>
+
+              <button
+                onClick={handleDepScan}
+                disabled={depLoading}
+                className="w-full py-2.5 bg-[var(--text-primary)] text-[var(--surface)] font-mono text-xs font-bold uppercase tracking-wider hover:bg-[var(--accent)] transition-colors flex items-center justify-center gap-2"
+              >
+                {depLoading ? 'Scanning Dependencies...' : '▶ Scan Dependency Manifest → Import to Inventory'}
+              </button>
+
+              {depImportStatus && (
+                <div className="border border-green-300 bg-green-50 text-green-800 font-mono text-xs px-4 py-2 font-bold">
+                  {depImportStatus}
+                </div>
+              )}
+
+              {depFindings.length > 0 && (
+                <div className="border border-[var(--border)] overflow-hidden">
+                  <div className="bg-[var(--surface-raised)] border-b border-[var(--border)] px-4 py-2 font-mono text-xs font-bold text-[var(--text-muted)] uppercase flex justify-between">
+                    <span>Crypto Library Findings — {depFindings.length} detected</span>
+                    <span>source: dependency → unified inventory</span>
+                  </div>
+                  <div className="divide-y divide-[var(--border)]">
+                    {(depFindings as Record<string, unknown>[]).map((f, i) => {
+                      const risk = String(f.inferred_risk || 'medium');
+                      const riskColor = risk === 'high' ? 'text-red-700 bg-red-50 border-red-300'
+                        : risk === 'medium' ? 'text-amber-700 bg-amber-50 border-amber-300'
+                        : 'text-green-700 bg-green-50 border-green-300';
+                      return (
+                        <div key={i} className="p-4 font-mono text-xs space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-[var(--text-primary)] text-sm">{String(f.name)}</span>
+                              {Boolean(f.version) && <span className="text-[var(--text-muted)]">v{String(f.version)}</span>}
+                              <span className={`border px-2 py-0.5 font-bold uppercase text-[10px] ${riskColor}`}>
+                                {risk} risk
+                              </span>
+                              {Boolean(f.pqc_ready) && (
+                                <span className="border border-green-300 bg-green-50 text-green-700 px-2 py-0.5 font-bold uppercase text-[10px]">
+                                  PQC Ready
+                                </span>
+                              )}
+                            </div>
+                            {Boolean(f.quantum_vulnerable_defaults) && (
+                              <span className="text-red-600 font-bold text-[10px] uppercase">⚠ Quantum-Vulnerable Defaults</span>
+                            )}
+                          </div>
+                          <div className="text-[var(--text-muted)]">{String(f.capability || '')}</div>
+                          <div className="flex items-start gap-2">
+                            <span className="text-[var(--text-muted)] uppercase text-[10px] font-bold shrink-0">PQC Target:</span>
+                            <span className="text-[var(--accent)] font-semibold">{String(f.pqc_recommendation || '')}</span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <span className="text-[var(--text-muted)] uppercase text-[10px] font-bold shrink-0">Upgrade Note:</span>
+                            <span className="text-[var(--text-secondary)] text-[11px]">{String(f.upgrade_note || '')}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: CONTAINER SCANNER */}
           {activeTab === 'CONTAINER' && (
             <div className="border border-[var(--border)] bg-[var(--surface)] p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
@@ -669,15 +1029,26 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
                 disabled={dockerLoading}
                 className="w-full py-2.5 bg-[var(--text-primary)] text-[var(--surface)] font-mono text-xs font-bold uppercase hover:bg-[var(--accent)] transition-colors"
               >
-                {dockerLoading ? 'Parsing Container Layers...' : '▶ Analyze Container Build Directives'}
+                {dockerLoading ? 'Parsing Container Layers...' : '▶ Analyze Container Build Directives → Import to Inventory'}
               </button>
+
+              {containerImportStatus && (
+                <div className="border border-green-300 bg-green-50 text-green-800 font-mono text-xs px-4 py-2 font-bold">
+                  {containerImportStatus}
+                </div>
+              )}
 
               {/* Container Findings */}
               {dockerFindings.length > 0 && (
                 <div className="space-y-2 pt-2">
-                  <span className="font-mono text-xs uppercase text-[var(--accent)] font-bold">
-                    Container Findings ({dockerFindings.length})
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs uppercase text-[var(--accent)] font-bold">
+                      Container Findings ({dockerFindings.length})
+                    </span>
+                    <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase">
+                      source: container → unified inventory
+                    </span>
+                  </div>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {dockerFindings.map((f, i) => (
                       <div key={i} className="border border-[var(--border)] bg-[var(--surface-raised)] p-3 text-xs space-y-1">
@@ -703,7 +1074,361 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
             </div>
           )}
 
-          {/* TAB 4: API & JWT SCANNER */}
+          {/* TAB 5: BINARY SCANNER (Phase 2) */}
+          {activeTab === 'BINARY' && (
+            <div className="border border-[var(--border)] bg-[var(--surface)] p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+                <div>
+                  <h2 className="font-display text-base font-bold uppercase text-[var(--text-primary)]">
+                    Binary Symbol &amp; Signature Scanner
+                  </h2>
+                  <p className="text-[11px] font-mono text-[var(--text-muted)] mt-0.5">
+                    Phase 2 · Static symbol &amp; string inspection (OpenSSL, BoringSSL, libsodium, PKCS, PQC)
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono text-[var(--text-muted)]">Presets:</span>
+                  <button
+                    onClick={() => { setBinContent(PRESET_BIN_OPENSSL); setBinFilename('libauth_crypto.so'); }}
+                    className="font-mono text-[10px] px-2 py-0.5 border border-[var(--border)] bg-[var(--surface-raised)] hover:bg-[var(--text-primary)] hover:text-[var(--surface)]"
+                  >
+                    OpenSSL .so
+                  </button>
+                  <button
+                    onClick={() => { setBinContent(PRESET_BIN_PQC); setBinFilename('liboqs_provider.so'); }}
+                    className="font-mono text-[10px] px-2 py-0.5 border border-[var(--border)] bg-[var(--surface-raised)] hover:bg-[var(--text-primary)] hover:text-[var(--surface)]"
+                  >
+                    PQC Provider
+                  </button>
+                  <button
+                    onClick={() => { setBinContent(PRESET_BIN_LIBSODIUM); setBinFilename('libsecure_box.so'); }}
+                    className="font-mono text-[10px] px-2 py-0.5 border border-[var(--border)] bg-[var(--surface-raised)] hover:bg-[var(--text-primary)] hover:text-[var(--surface)]"
+                  >
+                    libsodium
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                <div className="sm:col-span-3 space-y-1">
+                  <label className="text-[10px] uppercase text-[var(--text-muted)] font-bold">
+                    Binary Target Name
+                  </label>
+                  <input
+                    type="text"
+                    value={binFilename}
+                    onChange={(e) => setBinFilename(e.target.value)}
+                    className="w-full border border-[var(--border)] bg-[var(--surface-raised)] p-2 text-[var(--text-primary)] font-mono outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1 font-mono text-xs">
+                <label className="text-[10px] uppercase text-[var(--text-muted)] font-bold">
+                  Extracted Binary Strings / Symbol Table Dump
+                </label>
+                <textarea
+                  rows={8}
+                  value={binContent}
+                  onChange={(e) => setBinContent(e.target.value)}
+                  className="w-full border border-[var(--border)] bg-[#1e1e1e] text-[#d4d4d4] p-3 font-mono text-xs leading-relaxed outline-none"
+                />
+              </div>
+
+              <button
+                onClick={handleBinaryScan}
+                disabled={binLoading}
+                className="w-full py-2.5 bg-[var(--text-primary)] text-[var(--surface)] font-mono text-xs font-bold uppercase tracking-wider hover:bg-[var(--accent)] transition-colors flex items-center justify-center gap-2"
+              >
+                {binLoading ? 'Inspecting Binary Symbols...' : '▶ Inspect Binary Symbols → Import to Inventory'}
+              </button>
+
+              {binImportStatus && (
+                <div className="border border-green-300 bg-green-50 text-green-800 font-mono text-xs px-4 py-2 font-bold">
+                  {binImportStatus}
+                </div>
+              )}
+
+              {binFormat && (
+                <div className="flex flex-wrap gap-2 items-center font-mono text-xs">
+                  <span className="border border-[var(--border)] bg-[var(--surface-raised)] px-2.5 py-1 font-bold text-[var(--text-primary)]">
+                    Format: {binFormat}
+                  </span>
+                  {binLibraries.map(lib => (
+                    <span key={lib} className="border border-[var(--accent)] bg-[var(--surface-raised)] text-[var(--accent)] px-2 py-0.5 font-bold text-[11px]">
+                      {lib}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {binFindings.length > 0 && (
+                <div className="border border-[var(--border)] overflow-hidden">
+                  <div className="bg-[var(--surface-raised)] border-b border-[var(--border)] px-4 py-2 font-mono text-xs font-bold text-[var(--text-muted)] uppercase flex justify-between">
+                    <span>Cryptographic Symbol Findings — {binFindings.length} detected</span>
+                    <span>source: binary → unified inventory</span>
+                  </div>
+                  <div className="divide-y divide-[var(--border)]">
+                    {(binFindings as Record<string, unknown>[]).map((f, i) => {
+                      const sev = String(f.severity || 'MEDIUM');
+                      const sevColor = sev === 'CRITICAL' ? 'bg-[#fee2e2] text-[#b91c1c] border-[#ef4444]'
+                        : sev === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-300'
+                        : sev === 'INFORMATIONAL' ? 'bg-blue-50 text-blue-700 border-blue-300'
+                        : 'bg-yellow-50 text-yellow-700 border-yellow-300';
+                      const conf = Number(f.confidence_score || 0.85);
+                      return (
+                        <div key={i} className="p-4 font-mono text-xs space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-[var(--text-primary)] text-sm">{String(f.library)}</span>
+                              <span className="text-[var(--text-secondary)] font-semibold">({String(f.algorithm)})</span>
+                              <span className={`border px-1.5 py-0.5 text-[10px] font-bold uppercase ${sevColor}`}>
+                                {sev}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-[var(--text-muted)] font-bold">
+                              Confidence: {(conf * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                          <div className="text-[var(--text-secondary)]">{String(f.description || '')}</div>
+                          {Array.isArray(f.matched_symbols) && f.matched_symbols.length > 0 && (
+                            <div className="flex flex-wrap gap-1 items-center">
+                              <span className="text-[10px] uppercase font-bold text-[var(--text-muted)]">Symbols:</span>
+                              {(f.matched_symbols as string[]).map((s, idx) => (
+                                <code key={idx} className="bg-[var(--surface)] border border-[var(--border)] px-1 py-0.5 text-[11px] text-[var(--accent)]">
+                                  {s}
+                                </code>
+                              ))}
+                            </div>
+                          )}
+                          <div className="text-[11px] text-[var(--text-secondary)]">
+                            <strong>Remediation:</strong> {String(f.remediation || '')}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 6: HARDWARE SECURITY MODULE (HSM) (Phase 3) */}
+          {activeTab === 'HSM' && (
+            <div className="border border-[var(--border)] bg-[var(--surface)] p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+                <div>
+                  <h2 className="font-display text-base font-bold uppercase text-[var(--text-primary)]">
+                    Hardware Security Module (HSM) Prober
+                  </h2>
+                  <p className="text-[11px] font-mono text-[var(--text-muted)] mt-0.5">
+                    Phase 3 · FIPS 140 Level 3 roots of trust, PKCS#11 slots &amp; hardware mechanism discovery
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono text-[var(--text-muted)]">Device Presets:</span>
+                  <button
+                    onClick={() => { setHsmContent(PRESET_HSM_LUNA); setHsmFilename('luna_pkcs11.conf'); }}
+                    className="font-mono text-[10px] px-2 py-0.5 border border-[var(--border)] bg-[var(--surface-raised)] hover:bg-[var(--text-primary)] hover:text-[var(--surface)]"
+                  >
+                    Thales Luna
+                  </button>
+                  <button
+                    onClick={() => { setHsmContent(PRESET_HSM_YUBI); setHsmFilename('yubihsm.conf'); }}
+                    className="font-mono text-[10px] px-2 py-0.5 border border-[var(--border)] bg-[var(--surface-raised)] hover:bg-[var(--text-primary)] hover:text-[var(--surface)]"
+                  >
+                    YubiHSM 2
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                <div className="sm:col-span-3 space-y-1">
+                  <label className="text-[10px] uppercase text-[var(--text-muted)] font-bold">
+                    PKCS#11 Configuration / Module Path
+                  </label>
+                  <input
+                    type="text"
+                    value={hsmFilename}
+                    onChange={(e) => setHsmFilename(e.target.value)}
+                    className="w-full border border-[var(--border)] bg-[var(--surface-raised)] p-2 text-[var(--text-primary)] font-mono outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1 font-mono text-xs">
+                <label className="text-[10px] uppercase text-[var(--text-muted)] font-bold">
+                  PKCS#11 Cryptoki Configuration Content
+                </label>
+                <textarea
+                  rows={8}
+                  value={hsmContent}
+                  onChange={(e) => setHsmContent(e.target.value)}
+                  className="w-full border border-[var(--border)] bg-[#1e1e1e] text-[#d4d4d4] p-3 font-mono text-xs leading-relaxed outline-none"
+                />
+              </div>
+
+              <button
+                onClick={handleHsmScan}
+                disabled={hsmLoading}
+                className="w-full py-2.5 bg-[var(--text-primary)] text-[var(--surface)] font-mono text-xs font-bold uppercase tracking-wider hover:bg-[var(--accent)] transition-colors flex items-center justify-center gap-2"
+              >
+                {hsmLoading ? 'Probing PKCS#11 Slots...' : '▶ Probe Hardware HSM → Import to Inventory'}
+              </button>
+
+              {hsmImportStatus && (
+                <div className="border border-green-300 bg-green-50 text-green-800 font-mono text-xs px-4 py-2 font-bold">
+                  {hsmImportStatus}
+                </div>
+              )}
+
+              {hsmFindings.length > 0 && (
+                <div className="border border-[var(--border)] overflow-hidden">
+                  <div className="bg-[var(--surface-raised)] border-b border-[var(--border)] px-4 py-2 font-mono text-xs font-bold text-[var(--text-muted)] uppercase flex justify-between">
+                    <span>HSM Cryptographic Mechanisms — {hsmFindings.length} discovered</span>
+                    <span>source: hsm → unified inventory</span>
+                  </div>
+                  <div className="divide-y divide-[var(--border)]">
+                    {(hsmFindings as Record<string, unknown>[]).map((f, i) => {
+                      const isVuln = Boolean(f.is_quantum_vulnerable);
+                      return (
+                        <div key={i} className="p-4 font-mono text-xs space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-[var(--text-primary)] text-sm">{String(f.mechanism)}</span>
+                              <span className="text-[var(--text-secondary)]">({String(f.vendor)})</span>
+                              <span className={`border px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                                isVuln ? 'bg-[#fee2e2] text-[#b91c1c] border-[#ef4444]' : 'bg-green-50 text-green-700 border-green-300'
+                              }`}>
+                                {isVuln ? 'Quantum Vulnerable' : 'Safe / Symmetric'}
+                              </span>
+                            </div>
+                            <span className="text-[10px] border border-[var(--border)] bg-[var(--surface-raised)] px-2 py-0.5 text-[var(--text-primary)] font-bold">
+                              {String(f.fips_level)}
+                            </span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <span className="text-[var(--text-muted)] uppercase text-[10px] font-bold shrink-0">PQC Agility:</span>
+                            <span className="text-[var(--accent)] text-[11px]">{String(f.pqc_support || '')}</span>
+                          </div>
+                          <div className="text-[11px] text-[var(--text-secondary)]">
+                            <strong>Upgrade Guidance:</strong> {String(f.remediation || '')}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 7: CLOUD KMS & CERTIFICATE SERVICES (Phase 3) */}
+          {activeTab === 'CLOUD_KMS' && (
+            <div className="border border-[var(--border)] bg-[var(--surface)] p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+                <div>
+                  <h2 className="font-display text-base font-bold uppercase text-[var(--text-primary)]">
+                    Cloud KMS &amp; Certificate Discovery
+                  </h2>
+                  <p className="text-[11px] font-mono text-[var(--text-muted)] mt-0.5">
+                    Phase 3 · AWS KMS, Azure Key Vault, Google Cloud KMS cryptographic posture audit
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono text-[var(--text-muted)]">Presets:</span>
+                  <button
+                    onClick={() => { setKmsContent(PRESET_CLOUD_KMS); setKmsFilename('aws_kms_keys.json'); }}
+                    className="font-mono text-[10px] px-2 py-0.5 border border-[var(--border)] bg-[var(--surface-raised)] hover:bg-[var(--text-primary)] hover:text-[var(--surface)]"
+                  >
+                    AWS KMS
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                <div className="sm:col-span-3 space-y-1">
+                  <label className="text-[10px] uppercase text-[var(--text-muted)] font-bold">
+                    Cloud Provider Manifest File
+                  </label>
+                  <input
+                    type="text"
+                    value={kmsFilename}
+                    onChange={(e) => setKmsFilename(e.target.value)}
+                    className="w-full border border-[var(--border)] bg-[var(--surface-raised)] p-2 text-[var(--text-primary)] font-mono outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1 font-mono text-xs">
+                <label className="text-[10px] uppercase text-[var(--text-muted)] font-bold">
+                  KMS JSON Key Listing / Resource Definition
+                </label>
+                <textarea
+                  rows={8}
+                  value={kmsContent}
+                  onChange={(e) => setKmsContent(e.target.value)}
+                  className="w-full border border-[var(--border)] bg-[#1e1e1e] text-[#d4d4d4] p-3 font-mono text-xs leading-relaxed outline-none"
+                />
+              </div>
+
+              <button
+                onClick={handleCloudKmsScan}
+                disabled={kmsLoading}
+                className="w-full py-2.5 bg-[var(--text-primary)] text-[var(--surface)] font-mono text-xs font-bold uppercase tracking-wider hover:bg-[var(--accent)] transition-colors flex items-center justify-center gap-2"
+              >
+                {kmsLoading ? 'Auditing Cloud KMS Keys...' : '▶ Audit Cloud KMS Keys → Import to Inventory'}
+              </button>
+
+              {kmsImportStatus && (
+                <div className="border border-green-300 bg-green-50 text-green-800 font-mono text-xs px-4 py-2 font-bold">
+                  {kmsImportStatus}
+                </div>
+              )}
+
+              {kmsFindings.length > 0 && (
+                <div className="border border-[var(--border)] overflow-hidden">
+                  <div className="bg-[var(--surface-raised)] border-b border-[var(--border)] px-4 py-2 font-mono text-xs font-bold text-[var(--text-muted)] uppercase flex justify-between">
+                    <span>Cloud KMS Keys Audited — {kmsFindings.length} discovered</span>
+                    <span>source: cloud_kms → unified inventory</span>
+                  </div>
+                  <div className="divide-y divide-[var(--border)]">
+                    {(kmsFindings as Record<string, unknown>[]).map((f, i) => {
+                      const isVuln = Boolean(f.is_quantum_vulnerable);
+                      return (
+                        <div key={i} className="p-4 font-mono text-xs space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-[var(--text-primary)] text-sm">{String(f.key_spec)}</span>
+                              <span className="text-[var(--text-secondary)] font-mono text-[11px]">({String(f.provider)})</span>
+                              <span className={`border px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                                isVuln ? 'bg-[#fee2e2] text-[#b91c1c] border-[#ef4444]' : 'bg-green-50 text-green-700 border-green-300'
+                              }`}>
+                                {isVuln ? 'Shor Vulnerable' : 'Quantum Safe'}
+                              </span>
+                            </div>
+                            <span className={`text-[10px] border px-2 py-0.5 font-bold ${
+                              f.rotation_enabled
+                                ? 'border-green-300 bg-green-50 text-green-700'
+                                : 'border-amber-300 bg-amber-50 text-amber-700'
+                            }`}>
+                              Rotation: {f.rotation_enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </div>
+                          <div className="font-mono text-[11px] text-[var(--text-muted)] break-all">{String(f.key_id)}</div>
+                          <div className="text-[11px] text-[var(--text-secondary)]">
+                            <strong>Guidance:</strong> {String(f.recommendation || '')}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 8: API & JWT SCANNER */}
           {activeTab === 'API' && (
             <div className="border border-[var(--border)] bg-[var(--surface)] p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">

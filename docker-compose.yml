@@ -68,6 +68,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-https://mdpacbqwskcjpgwtvonk.supabase.co}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kcGFjYnF3c2tjanBnd3R2b25rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MDEyMDAsImV4cCI6MjA5MDI3NzIwMH0.u0bOQ3u7gS2T7h2R5M6X2L-example}
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
     container_name: ecdat-frontend
     restart: always
     ports:

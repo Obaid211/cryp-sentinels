@@ -36,6 +36,7 @@ export interface DashboardData {
     value: number;
     color: string;
   }>;
+  sources_breakdown?: Record<string, number>;
   key_type_breakdown: Array<{
     key_type: string;
     count: number;
@@ -44,6 +45,9 @@ export interface DashboardData {
     id: number;
     host: string;
     port: number;
+    source?: string;
+    business_criticality?: string;
+    data_lifetime?: string;
     service_name: string;
     criticality: string;
     cert_key_type: string;
@@ -55,11 +59,22 @@ export interface DashboardData {
   }>;
 }
 
+const SOURCE_BADGES: Record<string, { label: string; className: string }> = {
+  source_code: { label: 'Source Code', className: 'text-violet-700 bg-violet-50 border-violet-200' },
+  dependency: { label: 'Dependency', className: 'text-amber-700 bg-amber-50 border-amber-200' },
+  container: { label: 'Container', className: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+  binary: { label: 'Binary', className: 'text-gray-700 bg-gray-50 border-gray-200' },
+  hsm: { label: 'Hardware HSM', className: 'text-purple-700 bg-purple-50 border-purple-200' },
+  cloud_kms: { label: 'Cloud KMS', className: 'text-sky-700 bg-sky-50 border-sky-200' },
+  tls: { label: 'TLS/Network', className: 'text-blue-700 bg-blue-50 border-blue-200' },
+};
+
 interface ExecutiveDashboardProps {
   data: DashboardData | null;
   loading: boolean;
   error: string | null;
   onNavigateToAsset?: (host: string, port: number) => void;
+  onRetry?: () => void;
 }
 
 export const ExecutiveDashboard = ({
@@ -67,8 +82,9 @@ export const ExecutiveDashboard = ({
   loading,
   error,
   onNavigateToAsset,
+  onRetry,
 }: ExecutiveDashboardProps) => {
-  if (loading) {
+  if (loading || (!data && !error)) {
     return (
       <div className="mx-auto max-w-7xl p-8">
         <div className="border border-[#e5e5e5] bg-white p-12 text-center shadow-flat-sm">
@@ -92,6 +108,14 @@ export const ExecutiveDashboard = ({
           <p className="mt-2 font-mono text-xs text-tertiary">
             {error || 'Failed to retrieve dashboard state from /api/dashboard/summary.'}
           </p>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="mt-4 inline-flex items-center gap-2 border border-primary bg-primary px-4 py-2 font-mono text-xs font-bold uppercase text-white hover:bg-black transition-colors"
+            >
+              Retry Connection
+            </button>
+          )}
         </div>
       </div>
     );
@@ -245,6 +269,28 @@ export const ExecutiveDashboard = ({
         </div>
       </div>
 
+      {/* Multi-Source Discovery Pipeline Coverage Strip */}
+      {data.sources_breakdown && Object.keys(data.sources_breakdown).length > 0 && (
+        <div className="border border-[#e5e5e5] bg-white p-4 shadow-flat-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="font-mono text-[10px] uppercase tracking-widest text-primary font-bold">
+              UNIFIED DISCOVERY PIPELINE COVERAGE (7 SOURCES)
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(data.sources_breakdown).map(([src, count]) => {
+                const b = SOURCE_BADGES[src] || SOURCE_BADGES.tls;
+                return (
+                  <span key={src} className={`border px-2.5 py-1 font-mono text-[11px] font-bold uppercase flex items-center gap-1.5 ${b.className}`}>
+                    <span>{b.label}:</span>
+                    <span className="font-extrabold">{count}</span>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Two Charts Side-by-Side */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Donut Chart: Quantum Risk Level Distribution */}
@@ -366,7 +412,8 @@ export const ExecutiveDashboard = ({
           <table className="w-full text-left font-mono text-xs border-collapse">
             <thead>
               <tr className="border-b border-secondary bg-[#faf9f5] text-tertiary">
-                <th className="py-2.5 px-3">ENDPOINT</th>
+                <th className="py-2.5 px-3">ENDPOINT / TARGET</th>
+                <th className="py-2.5 px-3">SOURCE</th>
                 <th className="py-2.5 px-3">SERVICE</th>
                 <th className="py-2.5 px-3">TIER</th>
                 <th className="py-2.5 px-3">KEY SPECS</th>
@@ -376,39 +423,48 @@ export const ExecutiveDashboard = ({
               </tr>
             </thead>
             <tbody>
-              {top_vulnerable_assets.map((asset) => (
-                <tr 
-                  key={asset.id} 
-                  onClick={() => onNavigateToAsset && onNavigateToAsset(asset.host, asset.port)}
-                  className="border-b border-[#eeeeea] hover:bg-[#faf9f5] cursor-pointer transition-colors"
-                >
-                  <td className="py-3 px-3 font-bold text-secondary">
-                    {asset.host}:{asset.port}
-                  </td>
-                  <td className="py-3 px-3 text-secondary">
-                    {asset.service_name}
-                  </td>
-                  <td className="py-3 px-3">
-                    <span className="border border-[#e5e5e5] bg-white px-2 py-0.5 font-bold text-secondary">
-                      {asset.criticality}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-tertiary">
-                    {asset.cert_key_type} {asset.cert_key_size_bits}b
-                  </td>
-                  <td className="py-3 px-3 text-tertiary">
-                    {asset.tls_version}
-                  </td>
-                  <td className="py-3 px-3">
-                    <span className={asset.days_to_expiry <= 30 ? 'text-severity-critical font-bold' : 'text-tertiary'}>
-                      {asset.days_to_expiry} days
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    {getScoreBadge(asset.risk_score)}
-                  </td>
-                </tr>
-              ))}
+              {top_vulnerable_assets.map((asset) => {
+                const badge = SOURCE_BADGES[asset.source || 'tls'] || SOURCE_BADGES.tls;
+                const endpointDisplay = asset.port && asset.port > 0 ? `${asset.host}:${asset.port}` : asset.host;
+                return (
+                  <tr 
+                    key={asset.id} 
+                    onClick={() => onNavigateToAsset && onNavigateToAsset(asset.host, asset.port)}
+                    className="border-b border-[#eeeeea] hover:bg-[#faf9f5] cursor-pointer transition-colors"
+                  >
+                    <td className="py-3 px-3 font-bold text-secondary max-w-[220px] truncate" title={endpointDisplay}>
+                      {endpointDisplay}
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <span className={`border px-2 py-0.5 font-bold text-[10px] uppercase ${badge.className}`}>
+                        {badge.label}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-secondary">
+                      {asset.service_name}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="border border-[#e5e5e5] bg-white px-2 py-0.5 font-bold text-secondary">
+                        {asset.criticality}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-tertiary">
+                      {asset.cert_key_type} {asset.cert_key_size_bits ? `${asset.cert_key_size_bits}b` : ''}
+                    </td>
+                    <td className="py-3 px-3 text-tertiary">
+                      {asset.tls_version || 'N/A'}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className={asset.days_to_expiry <= 30 ? 'text-severity-critical font-bold' : 'text-tertiary'}>
+                        {asset.days_to_expiry} days
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      {getScoreBadge(asset.risk_score)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

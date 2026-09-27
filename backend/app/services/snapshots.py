@@ -35,10 +35,13 @@ def save_snapshot(db: Session, name: Optional[str] = None) -> Dict[str, Any]:
             "id": a.id,
             "host": a.host,
             "port": a.port,
+            "source": a.source or "tls",
+            "business_criticality": a.business_criticality or "medium",
+            "data_lifetime": a.data_lifetime or "1-3y",
             "service": svc_name,
             "criticality": crit,
             "tls_version": a.tls_version,
-            "algorithm": a.cert_key_type,
+            "algorithm": a.cert_key_type or a.algorithm or "Unknown",
             "key_size": a.cert_key_size_bits,
             "days_to_expiry": a.days_to_expiry,
             "mwqrs": score,
@@ -149,6 +152,20 @@ def compare_snapshots(db: Session, old_id: int, new_id: int) -> Dict[str, Any]:
                 "property": "TLS Version",
                 "old": o.get("tls_version"),
                 "new": n.get("tls_version")
+            })
+
+        if str(o.get("business_criticality")) != str(n.get("business_criticality")):
+            changes.append({
+                "property": "Business Criticality",
+                "old": o.get("business_criticality"),
+                "new": n.get("business_criticality")
+            })
+
+        if str(o.get("data_lifetime")) != str(n.get("data_lifetime")):
+            changes.append({
+                "property": "Data Lifetime",
+                "old": o.get("data_lifetime"),
+                "new": n.get("data_lifetime")
             })
 
         if abs(mwqrs_delta) >= 0.1:

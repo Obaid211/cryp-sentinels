@@ -8,3 +8,69 @@
     border-radius: 0px !important;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Aurora Avatar — login page character animation
+   (float / light-drift / halo-pulse; respects prefers-reduced-motion)
+   -------------------------------------------------------------------------- */
+@keyframes aurora-float-kf {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
+
+@keyframes aurora-drift-1-kf {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  50% {
+    transform: translate(6px, -5px) scale(1.08);
+  }
+}
+
+@keyframes aurora-drift-2-kf {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  50% {
+    transform: translate(-7px, 4px) scale(1.1);
+  }
+}
+
+@keyframes aurora-pulse-kf {
+  0%, 100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.aurora-float {
+  animation: aurora-float-kf 6s ease-in-out infinite;
+}
+
+.aurora-drift-1 {
+  animation: aurora-drift-1-kf 8s ease-in-out infinite;
+}
+
+.aurora-drift-2 {
+  animation: aurora-drift-2-kf 10s ease-in-out infinite;
+}
+
+.aurora-pulse {
+  animation: aurora-pulse-kf 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-float,
+  .aurora-drift-1,
+  .aurora-drift-2,
+  .aurora-pulse {
+    animation: none;
+  }
+}
+

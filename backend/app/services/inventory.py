@@ -164,7 +164,7 @@ def seed_demo_data(db: Session):
 
         crit = "P2"
         if svc_id:
-            svc_obj = db.query(Service).get(svc_id)
+            svc_obj = db.get(Service, svc_id)
             if svc_obj:
                 crit = svc_obj.criticality
 
