@@ -31,19 +31,32 @@ jobs:
 
       - name: Run Pytest Suite
         run: |
-          pytest -v
+          python -m pytest -v
+        env:
+          PYTHONPATH: .
+          REQUIRE_AUTH: "False"
+          DATABASE_URL: "sqlite:///./ecdat.db"
 
       - name: Run Phase 1 End-to-End Verification
         run: |
           python verify_phase1_end_to_end.py
+        env:
+          PYTHONPATH: .
+          REQUIRE_AUTH: "False"
 
       - name: Run Phase 2 Binary & Container Scanner Verification
         run: |
           python test_phase2.py
+        env:
+          PYTHONPATH: .
+          REQUIRE_AUTH: "False"
 
       - name: Run Phase 3 HSM & Cloud KMS Verification
         run: |
           python test_phase3.py
+        env:
+          PYTHONPATH: .
+          REQUIRE_AUTH: "False"
 
   frontend-validation:
     name: Frontend Verification & Build
