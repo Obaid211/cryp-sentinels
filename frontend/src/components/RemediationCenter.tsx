@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { API_BASE_URL } from '../config';
+import { apiFetch } from '../lib/api';
 
 interface RemediationItem {
   priority_rank: number;
@@ -46,26 +46,32 @@ export const RemediationCenter = () => {
   const [data, setData] = useState<RemediationResponse | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchPlan = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiFetch('/api/remediation/plan');
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+      } else {
+        setError(`Failed to fetch remediation plan (HTTP ${res.status})`);
+      }
+    } catch (err: unknown) {
+      console.warn('[RemediationCenter] Plan fetch fallback:', err);
+      setError('Unable to connect to remediation telemetry service.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchPlan = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/remediation/plan`);
-        if (res.ok) {
-          const json = await res.json();
-          setData(json);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     void fetchPlan();
   }, []);
 
-  if (loading || !data) {
+  if (loading && !data) {
     return (
       <div className="mx-auto max-w-7xl p-8">
         <div className="border border-[#e5e5e5] bg-white p-12 text-center shadow-flat-sm font-mono text-xs text-tertiary">
@@ -74,6 +80,24 @@ export const RemediationCenter = () => {
       </div>
     );
   }
+
+  if (error && !data) {
+    return (
+      <div className="mx-auto max-w-7xl p-8">
+        <div className="border border-red-200 bg-red-50 p-8 text-center shadow-flat-sm">
+          <p className="font-mono text-xs text-red-600 mb-3">{error}</p>
+          <button
+            onClick={() => void fetchPlan()}
+            className="px-4 py-1.5 bg-secondary text-white font-mono text-xs uppercase tracking-wider hover:bg-black transition-colors"
+          >
+            Retry Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
 
   const { summary, queue } = data;
 
