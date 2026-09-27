@@ -22,7 +22,15 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def init_db():
     Base.metadata.create_all(bind=engine)
 
+# Auto-initialize SQLite tables on load if local database
+if database_url.startswith("sqlite"):
+    try:
+        init_db()
+    except Exception:
+        pass
+
 def get_db():
+    init_db()
     db: Session = SessionLocal()
     try:
         yield db
