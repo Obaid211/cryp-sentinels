@@ -100,22 +100,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: actions/setup-buildx-action@v3
-
       - name: Build Backend Container
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: false
-          tags: ecdat-backend:test
+        run: docker build -t ecdat-backend:test ./backend
 
       - name: Build Frontend Container
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: false
-          tags: ecdat-frontend:test
-          build-args: |
-            VITE_SUPABASE_URL=https://mdpacbqwskcjpgwtvonk.supabase.co
-            VITE_SUPABASE_ANON_KEY=dummy-key-for-ci-build
+        run: |
+          docker build \
+            --build-arg VITE_SUPABASE_URL=https://mdpacbqwskcjpgwtvonk.supabase.co \
+            --build-arg VITE_SUPABASE_ANON_KEY=dummy-key-for-ci-build \
+            -t ecdat-frontend:test ./frontend
