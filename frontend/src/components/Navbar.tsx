@@ -15,7 +15,8 @@ import {
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
-  LogIn
+  LogIn,
+  KeyRound
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -62,6 +63,7 @@ export const Navbar = ({
     { id: 'compliance', label: 'Compliance', icon: FileCheck2 },
     { id: 'history-diff', label: 'Diff', icon: History },
     { id: 'assistant', label: 'Advisor', icon: Bot },
+    { id: 'login', label: isLoggedIn ? 'Session' : 'Sign In', icon: KeyRound },
   ];
 
   const checkScroll = useCallback(() => {

@@ -35,6 +35,35 @@ const TabFallback = () => (
   </div>
 );
 
+const VALID_TABS = new Set([
+  'landing',
+  'login',
+  'dashboard',
+  'inventory',
+  'remediation',
+  'threat-timeline',
+  'pqc-simulator',
+  'scanners',
+  'graph',
+  'diff',
+  'assistant',
+  'cbom',
+  'compliance',
+  'cbom-studio',
+  'history-diff',
+  'dependency-graph',
+]);
+
+function getInitialTab(): string {
+  if (typeof window === 'undefined') return 'landing';
+  const path = window.location.pathname.replace(/^\/+/, '').split('/')[0].toLowerCase();
+  const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].toLowerCase();
+  
+  if (VALID_TABS.has(path)) return path;
+  if (VALID_TABS.has(hash)) return hash;
+  return 'landing';
+}
+
 // ---------------------------------------------------------------------------
 // Auth-aware routing.
 // `isLoggedIn` mirrors the live Supabase session (localStorage-persisted):
@@ -45,7 +74,7 @@ const TabFallback = () => (
 // The dashboard route is gated so guests are bounced to the login page.
 // ---------------------------------------------------------------------------
 export function App() {
-  const [currentTab, setCurrentTab] = useState<string>('landing');
+  const [currentTab, setCurrentTab] = useState<string>(getInitialTab);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState<boolean>(false);
@@ -130,10 +159,28 @@ export function App() {
   const handleSelectTab = useCallback((tab: string) => {
     setCurrentTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    try {
+      const newPath = tab === 'landing' ? '/' : `/${tab}`;
+      if (window.location.pathname !== newPath) {
+        window.history.pushState(null, '', newPath);
+      }
+    } catch {
+      // Ignore
+    }
     if (tab === 'dashboard') {
       void fetchDashboardData(mode);
     }
   }, [mode, fetchDashboardData]);
+
+  // Synchronize browser forward / back button navigation
+  useEffect(() => {
+    const onPopState = () => {
+      const tab = getInitialTab();
+      setCurrentTab(tab);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   const handleModeChange = useCallback((newMode: 'LIVE' | 'CACHED' | 'OFFLINE') => {
     setMode(newMode);

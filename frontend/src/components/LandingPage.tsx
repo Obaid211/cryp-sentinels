@@ -54,6 +54,14 @@ export const LandingPage = ({ onExplore }: LandingPageProps) => {
                 </button>
 
                 <button
+                  onClick={() => onExplore('login')}
+                  className="flex items-center gap-3 border-2 border-primary bg-primary/10 px-6 py-3.5 font-mono text-xs font-bold uppercase tracking-wider text-primary hover:bg-primary hover:text-white transition-all shadow-flat"
+                >
+                  <Lock className="h-4 w-4" />
+                  <span>Sign In / Identity Portal</span>
+                </button>
+
+                <button
                   onClick={() => onExplore('pqc-simulator')}
                   className="flex items-center gap-3 border border-secondary bg-white px-6 py-3.5 font-mono text-xs font-bold uppercase tracking-wider text-secondary hover:border-primary hover:text-primary transition-colors"
                 >

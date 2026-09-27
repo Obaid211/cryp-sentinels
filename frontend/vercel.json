@@ -8,14 +8,14 @@
   "env": {
     "NODE_ENV": "production"
   },
-  "routes": [
+  "rewrites": [
     {
-      "src": "^/api/(.*)$",
-      "dest": "https://cryp-sentinels-backend.onrender.com/api/$1"
+      "source": "/api/(.*)",
+      "destination": "https://cryp-sentinels-backend.onrender.com/api/$1"
     },
     {
-      "src": "^(.*)$",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
