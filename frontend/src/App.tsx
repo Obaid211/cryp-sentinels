@@ -38,6 +38,7 @@ const TabFallback = () => (
 const VALID_TABS = new Set([
   'landing',
   'login',
+  'session',
   'dashboard',
   'inventory',
   'remediation',
@@ -69,11 +70,11 @@ function getIntendedTab(): string {
   try {
     const params = new URLSearchParams(window.location.search);
     const redirectParam = params.get('redirect')?.toLowerCase();
-    if (redirectParam && VALID_TABS.has(redirectParam) && redirectParam !== 'login' && redirectParam !== 'landing') {
+    if (redirectParam && VALID_TABS.has(redirectParam) && redirectParam !== 'login' && redirectParam !== 'session' && redirectParam !== 'landing') {
       return redirectParam;
     }
     const saved = sessionStorage.getItem('ecdat_intended_tab');
-    if (saved && VALID_TABS.has(saved) && saved !== 'login' && saved !== 'landing') {
+    if (saved && VALID_TABS.has(saved) && saved !== 'login' && saved !== 'session' && saved !== 'landing') {
       sessionStorage.removeItem('ecdat_intended_tab');
       return saved;
     }
@@ -185,7 +186,7 @@ export function App() {
   }, [currentTab, dashboardData, loading, mode, fetchDashboardData]);
 
   const handleSelectTab = useCallback((tab: string) => {
-    if (tab === 'login' && currentTab !== 'landing' && currentTab !== 'login') {
+    if ((tab === 'login' || tab === 'session') && currentTab !== 'landing' && currentTab !== 'login' && currentTab !== 'session') {
       try {
         sessionStorage.setItem('ecdat_intended_tab', currentTab);
       } catch {
@@ -270,7 +271,7 @@ export function App() {
         showToast('⚠️ Sign-out failed — try again.', 'error');
       }
     } else {
-      if (currentTab !== 'landing' && currentTab !== 'login') {
+      if (currentTab !== 'landing' && currentTab !== 'login' && currentTab !== 'session') {
         try {
           sessionStorage.setItem('ecdat_intended_tab', currentTab);
         } catch {
@@ -365,10 +366,11 @@ export function App() {
                the dashboard is gated so guests are redirected there. */}
           {currentTab === 'landing' ? (
             <LandingPage onExplore={(targetTab) => handleSelectTab(targetTab)} />
-          ) : currentTab === 'login' ? (
+          ) : currentTab === 'login' || currentTab === 'session' ? (
             <LoginPage
-              customHeader="Post-Quantum Identity Portal"
+              customHeader={isLoggedIn ? 'Active Cryptographic Session' : 'Post-Quantum Identity Portal'}
               onAuthSuccess={handleAuthSuccess}
+              onNavigateTab={handleSelectTab}
             />
           ) : currentTab === 'dashboard' ? (
             isLoggedIn ? (

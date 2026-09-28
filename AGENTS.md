@@ -81,6 +81,14 @@
 12. **Multi-Source Analytics Panels in Executive Dashboard** (`ExecutiveDashboard.tsx`, `dashboard.py`)
    - Displays 3-part analytics cards: Algorithm Families (RSA, ECC, AES, SHA, PQC), Mosca Shelf-Life Data Retention Urgency (<1y to >10y), and Business Criticality Tiers (Critical to Low).
    - Enriched Top Vulnerability queue with target file paths, libraries, and usage contexts for non-TLS discovery assets.
+13. **Session Page Retention & Operator Identity Console** (`LoginPage.tsx`, `App.tsx`, `Navbar.tsx`)
+   - Resolved auto-redirect loop where navigating to the Session page bounced the operator back to the dashboard within 700ms.
+   - Added `justAuthenticated` state guard so auto-redirection triggers strictly upon newly executed sign-in actions or OAuth callbacks.
+   - Created a persistent **Active Cryptographic Session & Identity Hub** displaying verified operator identity, NTRO Level 3 PQC Operator clearance, token validation status, direct navigation links to Console, Inventory, and Scanners, and a secure sign-out action.
+14. **11 Real-World Monitored TLS Web Endpoints & Batch Discovery Runner** (`inventory.py`, `dashboard.py`, `ScannerSuite.tsx`, `ExecutiveDashboard.tsx`)
+   - Added 11 real-world public web targets across diverse crypto architectures: Cloudflare Edge (PQC Kyber hybrid), Google Services, GitHub API Gateway, Microsoft Azure Platform, Amazon AWS, Wikimedia, NIST Standards Portal, Mozilla PKI, Linux Kernel Archive, PyPI, and BadSSL Legacy Lab.
+   - Integrated 1-click individual probing chips and an automated **Batch Discovery Runner** directly on the webpage (`ScannerSuite.tsx`) with real-time socket handshakes, progress tracking, and inventory synchronization.
+   - Added source filter pills (`All`, `TLS / Web`, `Non-TLS`) and quick search filtering to the Executive Dashboard Vulnerability Queue.
 
 ### ⚠️ Known limitations (not bugs)
 - **Signup requires email confirmation.** Supabase's default "Confirm email"

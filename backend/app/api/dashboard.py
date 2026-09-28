@@ -90,10 +90,10 @@ def get_dashboard_summary(
         src = a.source or "tls"
         sources_breakdown[src] = sources_breakdown.get(src, 0) + 1
 
-    # Top vulnerable assets (top 8 to give a richer view)
+    # Top vulnerable assets (top 20 to give a richer view across all sources and real endpoints)
     sorted_assets = sorted(assets, key=lambda x: x.risk_score, reverse=True)
     top_assets = []
-    for a in sorted_assets[:8]:
+    for a in sorted_assets[:20]:
         flags = []
         if a.risk_flags:
             try:

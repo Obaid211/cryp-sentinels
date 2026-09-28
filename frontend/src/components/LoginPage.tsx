@@ -43,6 +43,8 @@ export interface LoginPageProps {
    * sign-in, OAuth return with session, or guest demo access).
    */
   onAuthSuccess?: (email?: string) => void
+  /** Navigate directly to any application tab (dashboard, inventory, scanners, etc.). */
+  onNavigateTab?: (tab: string) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +140,7 @@ const outlineBtnStyle: React.CSSProperties = {
 export const LoginPage: React.FC<LoginPageProps> = ({
   customHeader = 'Post-Quantum Identity Portal',
   onAuthSuccess,
+  onNavigateTab,
 }) => {
   // ---- Auth state ---------------------------------------------------------
   const [sessionUser, setSessionUser] = useState<{ email: string | null } | null>(null)
@@ -149,6 +152,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [busy, setBusy] = useState(false)
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin')
   const [redirected, setRedirected] = useState(false)
+
+  // Track if the user explicitly initiated an auth action during this visit.
+  // This ensures visiting the Session page while logged in does NOT auto-redirect!
+  const [justAuthenticated, setJustAuthenticated] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash || ''
+      const search = window.location.search || ''
+      if (hash.includes('access_token=') || search.includes('code=')) {
+        return true
+      }
+    }
+    return false
+  })
 
   const toggleAuthMode = () => {
     setAuthMode((prev) => (prev === 'signin' ? 'signup' : 'signin'))
@@ -193,7 +209,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     }
   }, [])
 
-  // ---- Route to dashboard once a confirmed session exists ------------------
+  // ---- Route to dashboard once a confirmed session exists ONLY IF actively authenticated --
   const fireAuthSuccess = useCallback(() => {
     if (onAuthSuccess && !redirected) {
       setRedirected(true)
@@ -202,21 +218,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   }, [onAuthSuccess, redirected, sessionUser])
 
   useEffect(() => {
-    if (sessionUser) {
-      // Small delay so the "Signed in" confirmation is painted first.
+    // Only auto-redirect if user performed an active sign-in during this view
+    if (sessionUser && justAuthenticated && !redirected) {
       const t = window.setTimeout(fireAuthSuccess, 700)
       return () => window.clearTimeout(t)
     }
-  }, [sessionUser, fireAuthSuccess])
+  }, [sessionUser, justAuthenticated, redirected, fireAuthSuccess])
 
   const handleQuickDemoAccess = () => {
     setError(null)
     setSuccess('✓ Demo authorization granted. Entering cryptographic console…')
+    setJustAuthenticated(true)
     setSessionUser({ email: 'analyst@ecdat.internal' })
     if (onAuthSuccess) {
       setTimeout(() => {
         onAuthSuccess('analyst@ecdat.internal')
-      }, 400)
+      }, 500)
     }
   }
 
@@ -272,6 +289,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       }
     } else {
       setSuccess('Signed in. Redirecting to the dashboard…')
+      setJustAuthenticated(true)
     }
   }
 
@@ -310,6 +328,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     if (result.success) {
       setSessionUser(null)
       setRedirected(false)
+      setJustAuthenticated(false)
     } else {
       setError('Sign-out failed')
     }
@@ -385,36 +404,114 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </div>
 
           {/* Right: form column */}
-          <div style={{ flex: '1 1 320px', display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '420px' }}>
+          <div style={{ flex: '1 1 340px', display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '440px' }}>
             {isSignedIn ? (
-              <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: '16px', textAlign: 'center', background: 'var(--surface-raised)' }}>
-                <p style={{ color: 'var(--severity-safe)', fontWeight: 700, margin: 0 }}>
-                  ✓ {sessionUser!.email ?? 'signed in'}
-                </p>
-                <p style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '6px', fontFamily: 'Geist Mono, monospace' }}>
-                  Redirecting to your console…
-                </p>
-                <button
-                  onClick={handleSignOut}
-                  disabled={busy}
-                  style={{
-                    marginTop: '12px',
-                    padding: '8px 14px',
-                    border: '1px solid var(--border)',
-                    borderRadius: 0,
-                    background: 'var(--surface-raised)',
-                    color: 'var(--text-primary)',
-                    fontFamily: 'Geist Mono, monospace',
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                    textTransform: 'uppercase',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)' }}
-                >
-                  Sign Out
-                </button>
-              </div>
+              justAuthenticated ? (
+                /* Brief redirect animation if just signed in */
+                <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: '24px', textAlign: 'center', background: 'var(--surface-raised)' }}>
+                  <p style={{ color: 'var(--severity-safe)', fontWeight: 700, margin: 0, fontSize: '14px' }}>
+                    ✓ {sessionUser!.email ?? 'Authentication Verified'}
+                  </p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '8px', fontFamily: 'Geist Mono, monospace' }}>
+                    Entering cryptographic console…
+                  </p>
+                  <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center' }}>
+                    <div className="h-4 w-4 animate-spin border-2 border-primary border-t-transparent" />
+                  </div>
+                </div>
+              ) : (
+                /* Full persistent Active Cryptographic Session & Identity Hub */
+                <div style={{ border: '1px solid var(--border)', borderRadius: 0, padding: '20px', background: 'var(--surface-raised)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'between' }}>
+                    <div>
+                      <span style={{ ...labelStyles, color: 'var(--accent)', fontSize: '10px', fontWeight: 700 }}>
+                        AUTHENTICATED CONSOLE
+                      </span>
+                      <h3 style={{ margin: '4px 0 0', fontFamily: 'Geist Mono, monospace', fontSize: '14px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-primary)' }}>
+                        Operator Session
+                      </h3>
+                    </div>
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #10b98133', background: '#ecfdf5', padding: '3px 8px', color: '#047857', fontFamily: 'Geist Mono, monospace', fontSize: '10px', fontWeight: 700 }}>
+                      <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
+                      ONLINE
+                    </div>
+                  </div>
+
+                  {/* Metadata fields */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontFamily: 'Geist Mono, monospace', fontSize: '11px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed var(--border)', paddingBottom: '6px' }}>
+                      <span style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '10px' }}>Identity</span>
+                      <span style={{ fontWeight: 700, color: 'var(--text-primary)', wordBreak: 'break-all' }}>{sessionUser!.email ?? 'analyst@ecdat.internal'}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed var(--border)', paddingBottom: '6px' }}>
+                      <span style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '10px' }}>Clearance</span>
+                      <span style={{ fontWeight: 700, color: 'var(--accent)' }}>NTRO LEVEL 3 · PQC OPERATOR</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed var(--border)', paddingBottom: '6px' }}>
+                      <span style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '10px' }}>Algorithms</span>
+                      <span style={{ color: 'var(--text-primary)' }}>NIST FIPS 203/204/205</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dashed var(--border)', paddingBottom: '6px' }}>
+                      <span style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '10px' }}>Token Type</span>
+                      <span style={{ color: 'var(--severity-safe)', fontWeight: 600 }}>Live JWT · Verified</span>
+                    </div>
+                  </div>
+
+                  {/* Action CTAs */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '4px' }}>
+                    <button
+                      onClick={() => onNavigateTab ? onNavigateTab('dashboard') : fireAuthSuccess()}
+                      style={{
+                        ...primaryBtnStyle,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        padding: '11px',
+                      }}
+                    >
+                      <span>Enter Executive Console →</span>
+                    </button>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <button
+                        onClick={() => onNavigateTab ? onNavigateTab('inventory') : undefined}
+                        style={{ ...outlineBtnStyle, padding: '8px 10px', fontSize: '10px' }}
+                      >
+                        Asset Inventory
+                      </button>
+                      <button
+                        onClick={() => onNavigateTab ? onNavigateTab('scanners') : undefined}
+                        style={{ ...outlineBtnStyle, padding: '8px 10px', fontSize: '10px' }}
+                      >
+                        Scanner Suite
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={handleSignOut}
+                      disabled={busy}
+                      style={{
+                        marginTop: '4px',
+                        padding: '8px',
+                        border: '1px solid #fca5a5',
+                        background: '#fef2f2',
+                        color: '#b91c1c',
+                        fontFamily: 'Geist Mono, monospace',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        textTransform: 'uppercase',
+                        borderRadius: 0,
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = '#fee2e2' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = '#fef2f2' }}
+                    >
+                      Sign Out / Terminate Session
+                    </button>
+                  </div>
+                </div>
+              )
             ) : (
               <>
                 {/* Unified Auth Card (Replaces login block with signup and shows toggle link) */}

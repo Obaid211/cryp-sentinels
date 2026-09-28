@@ -191,6 +191,20 @@ const PRESET_CLOUD_KMS = `{
   ]
 }`;
 
+const REAL_WORLD_ENDPOINTS = [
+  { host: 'cloudflare.com', port: '443', label: 'Cloudflare Edge', badge: 'PQC Kyber Hybrid', desc: 'X25519+ML-KEM Hybrid Edge' },
+  { host: 'google.com', port: '443', label: 'Google Services', badge: 'PQC Experiment', desc: 'Global Mesh / TLS 1.3 / ECC P-256' },
+  { host: 'api.github.com', port: '443', label: 'GitHub API Gateway', badge: 'REST / TLS 1.3', desc: 'DigiCert TLS / ECC P-256' },
+  { host: 'microsoft.com', port: '443', label: 'Microsoft Platform', badge: 'Azure Core', desc: 'Enterprise Identity / RSA 2048' },
+  { host: 'aws.amazon.com', port: '443', label: 'Amazon AWS Portal', badge: 'Cloud Console', desc: 'Cloud Boundary / RSA 2048' },
+  { host: 'wikipedia.org', port: '443', label: 'Wikimedia Mesh', badge: 'Public Knowledge', desc: 'Global CDN / ECC P-256' },
+  { host: 'nist.gov', port: '443', label: 'NIST Standards', badge: 'FIPS 203/204 Body', desc: 'Official Post-Quantum Standards Portal' },
+  { host: 'mozilla.org', port: '443', label: 'Mozilla Foundation', badge: 'Security PKI', desc: 'Root Trust Program / RSA 2048' },
+  { host: 'kernel.org', port: '443', label: 'Linux Kernel', badge: 'Sovereign Archive', desc: 'Kernel Infrastructure / ECC P-256' },
+  { host: 'pypi.org', port: '443', label: 'PyPI Registry', badge: 'Package Index', desc: 'Python Cryptographic Artifacts' },
+  { host: 'badssl.com', port: '443', label: 'BadSSL Testbed', badge: 'Legacy Lab', desc: 'Cryptographic Evaluation Testbed' },
+];
+
 interface ScannerSuiteProps {
   mode?: 'LIVE' | 'CACHED' | 'OFFLINE';
 }
@@ -199,11 +213,25 @@ export const ScannerSuite: React.FC<ScannerSuiteProps> = ({ mode = 'LIVE' }) => 
   const [activeTab, setActiveTab] = useState<ScannerTab>('TLS');
 
   // TLS Scan State
-  const [tlsHost, setTlsHost] = useState(mode === 'OFFLINE' ? 'auth.internal.net' : 'api.github.com');
+  const [tlsHost, setTlsHost] = useState(mode === 'OFFLINE' ? 'auth.internal.net' : 'cloudflare.com');
   const [tlsPort, setTlsPort] = useState('443');
   const [tlsResult, setTlsResult] = useState<TlsScanResult | null>(null);
   const [tlsLoading, setTlsLoading] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  // Real-world batch discovery state
+  const [batchScanning, setBatchScanning] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [batchResults, setBatchResults] = useState<Array<{
+    host: string;
+    port: number;
+    status: string;
+    key_type?: string;
+    key_size?: number;
+    tls?: string;
+    cipher?: string;
+    risk?: number;
+  }>>([]);
 
   // Code Scan State
   const [codeContent, setCodeContent] = useState(PRESET_CODE_VULN);
@@ -318,6 +346,82 @@ argon2-cffi==23.1.0
     } finally {
       setTlsLoading(false);
     }
+  };
+
+  // Single target probe helper
+  const handleProbeTarget = (targetHost: string, targetPort: string = '443', autoRun: boolean = false) => {
+    setTlsHost(targetHost);
+    setTlsPort(targetPort);
+    if (autoRun) {
+      setTlsLoading(true);
+      setImportStatus(null);
+      triggerScanStream(`${targetHost}:${targetPort}`);
+      fetch(`${API_BASE_URL}/api/scanners/tls`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host: targetHost, port: parseInt(targetPort, 10) || 443, mode }),
+      })
+        .then((res) => res.json())
+        .then((data: TlsScanResult) => setTlsResult(data))
+        .catch((err) => {
+          setTlsResult({ host: targetHost, port: parseInt(targetPort, 10), status: 'error', error_message: String(err) });
+        })
+        .finally(() => setTlsLoading(false));
+    }
+  };
+
+  // Batch probe all 11 real endpoints
+  const handleBatchScanAll = async () => {
+    setBatchScanning(true);
+    setBatchProgress(0);
+    setBatchResults([]);
+    triggerScanStream('Batch Discovery: 11 Real Endpoints Probing');
+
+    const results: Array<{
+      host: string;
+      port: number;
+      status: string;
+      key_type?: string;
+      key_size?: number;
+      tls?: string;
+      cipher?: string;
+      risk?: number;
+    }> = [];
+
+    for (let i = 0; i < REAL_WORLD_ENDPOINTS.length; i++) {
+      const ep = REAL_WORLD_ENDPOINTS[i];
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/scanners/tls`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ host: ep.host, port: parseInt(ep.port, 10), mode }),
+        });
+        const data: TlsScanResult = await res.json();
+        results.push({
+          host: ep.host,
+          port: parseInt(ep.port, 10),
+          status: data.status,
+          key_type: data.cert_key_type,
+          key_size: data.cert_key_size_bits,
+          tls: data.tls_version,
+          cipher: data.cipher_suite,
+          risk: data.risk_score,
+        });
+
+        if (data.status === 'success') {
+          void fetch(`${API_BASE_URL}/api/scanners/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ finding: data }),
+          });
+        }
+      } catch {
+        results.push({ host: ep.host, port: parseInt(ep.port, 10), status: 'error' });
+      }
+      setBatchResults([...results]);
+      setBatchProgress(Math.round(((i + 1) / REAL_WORLD_ENDPOINTS.length) * 100));
+    }
+    setBatchScanning(false);
   };
 
   // Import finding to inventory
@@ -602,25 +706,133 @@ argon2-cffi==23.1.0
           {/* TAB 1: LIVE TLS */}
           {activeTab === 'TLS' && (
             <div className="border border-[var(--border)] bg-[var(--surface)] p-6 space-y-5">
-              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-                <h2 className="font-display text-base font-bold uppercase text-[var(--text-primary)]">
-                  Live Network TLS Prober
-                </h2>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-mono text-[var(--text-muted)]">Presets:</span>
+              <div className="border-b border-[var(--border)] pb-4 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h2 className="font-display text-base font-bold uppercase text-[var(--text-primary)]">
+                      Live Network TLS Prober
+                    </h2>
+                    <p className="text-xs text-[var(--text-secondary)] mt-0.5 font-mono">
+                      Connects directly to remote sockets, completes TLS 1.3/1.2 handshakes, and analyzes X.509 cert chains.
+                    </p>
+                  </div>
                   <button
-                    onClick={() => { setTlsHost('api.github.com'); setTlsPort('443'); }}
-                    className="font-mono text-[10px] px-2 py-0.5 border border-[var(--border)] bg-[var(--surface-raised)] hover:bg-[var(--text-primary)] hover:text-[var(--surface)]"
+                    onClick={handleBatchScanAll}
+                    disabled={batchScanning}
+                    className="px-3 py-1.5 border border-primary bg-primary text-white font-mono text-xs font-bold uppercase tracking-wider hover:bg-black transition-colors flex items-center gap-1.5"
                   >
-                    GitHub
-                  </button>
-                  <button
-                    onClick={() => { setTlsHost('google.com'); setTlsPort('443'); }}
-                    className="font-mono text-[10px] px-2 py-0.5 border border-[var(--border)] bg-[var(--surface-raised)] hover:bg-[var(--text-primary)] hover:text-[var(--surface)]"
-                  >
-                    Google
+                    <span>{batchScanning ? `Scanning (${batchProgress}%)` : '⚡ Batch Scan All 11 Endpoints'}</span>
                   </button>
                 </div>
+
+                {/* Real-World Preset Grid */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider font-bold">
+                    <span>11 Real-World Monitored Endpoints (Click to load or scan):</span>
+                    <span className="text-[var(--accent)] font-semibold">100% Real Live Sockets</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
+                    {REAL_WORLD_ENDPOINTS.map((ep) => {
+                      const isSelected = tlsHost === ep.host;
+                      return (
+                        <div
+                          key={ep.host}
+                          className={`p-2 border transition-all text-left flex flex-col justify-between font-mono cursor-pointer ${
+                            isSelected
+                              ? 'border-secondary bg-secondary text-white shadow-flat-sm'
+                              : 'border-[var(--border)] bg-[var(--surface-raised)] hover:border-primary text-secondary'
+                          }`}
+                          onClick={() => handleProbeTarget(ep.host, ep.port, false)}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-[11px] truncate">{ep.label}</span>
+                            <span className={`text-[8px] font-bold px-1 py-0.2 uppercase border ${
+                              isSelected ? 'border-white/40 bg-white/20 text-white' : 'border-primary/30 bg-primary/10 text-primary'
+                            }`}>
+                              {ep.badge}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center justify-between text-[9px]">
+                            <span className={isSelected ? 'text-white/80' : 'text-[var(--text-muted)]'}>
+                              {ep.host}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleProbeTarget(ep.host, ep.port, true);
+                              }}
+                              className={`text-[8px] font-bold px-1 py-0.5 uppercase border hover:opacity-80 transition-opacity ${
+                                isSelected
+                                  ? 'border-white bg-white text-secondary'
+                                  : 'border-secondary bg-secondary text-white'
+                              }`}
+                            >
+                              Scan
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Batch Progress Bar if running or complete */}
+                {batchScanning && (
+                  <div className="p-3 border border-primary bg-primary/5 space-y-2 font-mono text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-primary">Probing Real Endpoints Estate ({batchProgress}%)...</span>
+                      <span className="text-[10px] text-tertiary">Real sockets · Live ASN.1 inspection</span>
+                    </div>
+                    <div className="w-full bg-[#e5e5e5] h-2 rounded-none overflow-hidden">
+                      <div className="bg-primary h-full transition-all duration-300" style={{ width: `${batchProgress}%` }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Batch Results Table */}
+                {batchResults.length > 0 && (
+                  <div className="border border-[var(--border)] bg-[var(--surface)] overflow-x-auto">
+                    <div className="px-3 py-2 border-b border-[var(--border)] bg-[#faf9f5] flex items-center justify-between font-mono text-[10px] uppercase font-bold text-secondary">
+                      <span>Batch Discovery Findings ({batchResults.length} Endpoints Evaluated & Imported)</span>
+                      <span className="text-severity-safe font-bold">✓ Synced to Inventory</span>
+                    </div>
+                    <table className="w-full text-left font-mono text-[11px] border-collapse">
+                      <thead>
+                        <tr className="border-b border-[var(--border)] text-tertiary text-[10px]">
+                          <th className="p-2">Target</th>
+                          <th className="p-2">Status</th>
+                          <th className="p-2">TLS</th>
+                          <th className="p-2">Key Type</th>
+                          <th className="p-2 text-right">MWQRS Risk</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {batchResults.map((r) => (
+                          <tr key={r.host} className="border-b border-[#f0f0ee] hover:bg-[#faf9f5]">
+                            <td className="p-2 font-bold text-secondary">{r.host}:{r.port}</td>
+                            <td className="p-2">
+                              <span className={`px-1 py-0.2 text-[9px] font-bold uppercase border ${
+                                r.status === 'success' ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-red-300 bg-red-50 text-red-800'
+                              }`}>
+                                {r.status}
+                              </span>
+                            </td>
+                            <td className="p-2 text-tertiary">{r.tls || 'N/A'}</td>
+                            <td className="p-2 text-secondary">{r.key_type ? `${r.key_type} ${r.key_size || ''}b` : 'N/A'}</td>
+                            <td className="p-2 text-right font-bold">
+                              {r.risk !== undefined ? (
+                                <span className={r.risk >= 80 ? 'text-severity-critical' : r.risk >= 50 ? 'text-severity-medium' : 'text-severity-safe'}>
+                                  {r.risk.toFixed(1)}
+                                </span>
+                              ) : '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">

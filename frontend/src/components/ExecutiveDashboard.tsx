@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { 
   AlertTriangle, 
   ShieldAlert, 
   TrendingUp,
-  Server
+  Server,
+  Search
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -103,6 +105,9 @@ export const ExecutiveDashboard = ({
   onNavigateToAsset,
   onRetry,
 }: ExecutiveDashboardProps) => {
+  const [queueSourceFilter, setQueueSourceFilter] = useState<'all' | 'tls' | 'non_tls'>('all');
+  const [queueSearch, setQueueSearch] = useState('');
+
   if (loading || (!data && !error)) {
     return (
       <div className="mx-auto max-w-7xl p-8">
@@ -141,6 +146,17 @@ export const ExecutiveDashboard = ({
   }
 
   const { kpis, public_scan_stats, risk_distribution, key_type_breakdown, top_vulnerable_assets } = data;
+
+  const filteredAssets = (top_vulnerable_assets || []).filter((asset) => {
+    if (queueSourceFilter === 'tls' && (asset.source || 'tls') !== 'tls') return false;
+    if (queueSourceFilter === 'non_tls' && (asset.source || 'tls') === 'tls') return false;
+    if (queueSearch) {
+      const q = queueSearch.toLowerCase();
+      const match = `${asset.host} ${asset.port} ${asset.service_name} ${asset.cert_key_type} ${asset.algorithm} ${asset.source} ${asset.file_path || ''}`.toLowerCase();
+      if (!match.includes(q)) return false;
+    }
+    return true;
+  });
 
   const getScoreBadge = (score: number) => {
     if (score >= 80) {
@@ -495,7 +511,7 @@ export const ExecutiveDashboard = ({
 
       {/* Top Vulnerable Cryptographic Assets Table */}
       <div className="border border-secondary bg-white p-6 shadow-flat">
-        <div className="border-b border-[#e5e5e5] pb-4 flex items-center justify-between">
+        <div className="border-b border-[#e5e5e5] pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="font-mono text-[10px] uppercase tracking-widest text-primary font-bold">
               CRITICAL VULNERABILITY QUEUE
@@ -504,9 +520,47 @@ export const ExecutiveDashboard = ({
               Top Vulnerable Cryptographic Assets
             </h3>
           </div>
-          <span className="font-mono text-xs text-tertiary uppercase">
-            RANKED BY MWQRS
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Source Filter Pills */}
+            <div className="inline-flex border border-[#e5e5e5] bg-[#faf9f5] p-0.5 font-mono text-[10px]">
+              <button
+                onClick={() => setQueueSourceFilter('all')}
+                className={`px-2 py-1 font-bold transition-colors ${
+                  queueSourceFilter === 'all' ? 'bg-secondary text-white' : 'text-tertiary hover:text-secondary'
+                }`}
+              >
+                All ({top_vulnerable_assets.length})
+              </button>
+              <button
+                onClick={() => setQueueSourceFilter('tls')}
+                className={`px-2 py-1 font-bold transition-colors ${
+                  queueSourceFilter === 'tls' ? 'bg-secondary text-white' : 'text-tertiary hover:text-secondary'
+                }`}
+              >
+                TLS / Web ({top_vulnerable_assets.filter(a => (a.source || 'tls') === 'tls').length})
+              </button>
+              <button
+                onClick={() => setQueueSourceFilter('non_tls')}
+                className={`px-2 py-1 font-bold transition-colors ${
+                  queueSourceFilter === 'non_tls' ? 'bg-secondary text-white' : 'text-tertiary hover:text-secondary'
+                }`}
+              >
+                Non-TLS ({top_vulnerable_assets.filter(a => (a.source || 'tls') !== 'tls').length})
+              </button>
+            </div>
+
+            {/* Quick Filter Search */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Filter target..."
+                value={queueSearch}
+                onChange={(e) => setQueueSearch(e.target.value)}
+                className="w-36 sm:w-44 border border-[#e5e5e5] bg-[#faf9f5] px-2 py-1 pl-6 text-[10px] font-mono outline-none focus:border-primary text-secondary"
+              />
+              <Search className="h-3 w-3 text-tertiary absolute left-2 top-2 pointer-events-none" />
+            </div>
+          </div>
         </div>
 
         <div className="overflow-x-auto mt-4">
@@ -524,7 +578,7 @@ export const ExecutiveDashboard = ({
               </tr>
             </thead>
             <tbody>
-              {top_vulnerable_assets.map((asset) => {
+              {filteredAssets.map((asset) => {
                 const badge = SOURCE_BADGES[asset.source || 'tls'] || SOURCE_BADGES.tls;
                 const endpointDisplay = asset.port && asset.port > 0 ? `${asset.host}:${asset.port}` : asset.host;
                 return (
