@@ -75,6 +75,12 @@
    - Set production default fallback in `config.ts` so Vercel SPA never attempts calls to `127.0.0.1:8000`.
    - Injected safe public client-side Supabase credentials fallback in `supabase.ts` ensuring Vercel builds always have working auth clients.
    - Added 1-click **Quick Demo Access (Guest Mode)** in `LoginPage.tsx` so reviewers and users can instantly explore without email confirmation blockers.
+11. **Protected-Route Persistence & Deep-Link Restoration** (`App.tsx`, `LoginPage.tsx`)
+   - Pre-auth navigation state is stored in `sessionStorage` (`ecdat_intended_tab`) and query parameter `?redirect=<tab>`.
+   - After email sign-in, sign-up, demo guest access, or Google/GitHub OAuth callback returns, users are automatically routed to their intended tab (e.g. `/inventory`, `/remediation`) instead of always defaulting to `/dashboard`.
+12. **Multi-Source Analytics Panels in Executive Dashboard** (`ExecutiveDashboard.tsx`, `dashboard.py`)
+   - Displays 3-part analytics cards: Algorithm Families (RSA, ECC, AES, SHA, PQC), Mosca Shelf-Life Data Retention Urgency (<1y to >10y), and Business Criticality Tiers (Critical to Low).
+   - Enriched Top Vulnerability queue with target file paths, libraries, and usage contexts for non-TLS discovery assets.
 
 ### ⚠️ Known limitations (not bugs)
 - **Signup requires email confirmation.** Supabase's default "Confirm email"
@@ -85,11 +91,8 @@
   To complete Google login/signup, enable the Google provider in Supabase Dashboard and Google Cloud Console (see §4).
 
 ### ❌ Remaining / Optional TODO
-1. **Protected-route persistence** — after OAuth return, the user always
-   lands on `dashboard`. If we later add deep links (e.g. return to
-   `/inventory`), store the pre-auth tab in `sessionStorage`.
-2. **Frontend unit tests** — add vitest + React Testing Library for LoginPage and App.
-3. **Supabase project config** — see §4 (user actions to supply live credentials).
+1. **Frontend unit tests** — add vitest + React Testing Library for LoginPage and App.
+2. **Supabase project config** — see §4 (user actions to supply live credentials).
 
 ---
 

@@ -64,6 +64,25 @@ function getInitialTab(): string {
   return 'landing';
 }
 
+function getIntendedTab(): string {
+  if (typeof window === 'undefined') return 'dashboard';
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const redirectParam = params.get('redirect')?.toLowerCase();
+    if (redirectParam && VALID_TABS.has(redirectParam) && redirectParam !== 'login' && redirectParam !== 'landing') {
+      return redirectParam;
+    }
+    const saved = sessionStorage.getItem('ecdat_intended_tab');
+    if (saved && VALID_TABS.has(saved) && saved !== 'login' && saved !== 'landing') {
+      sessionStorage.removeItem('ecdat_intended_tab');
+      return saved;
+    }
+  } catch {
+    // Ignore
+  }
+  return 'dashboard';
+}
+
 // ---------------------------------------------------------------------------
 // Auth-aware routing.
 // `isLoggedIn` mirrors the live Supabase session (localStorage-persisted):
@@ -119,7 +138,16 @@ export function App() {
       setCurrentUserEmail(user?.email ?? null);
       if (event === 'SIGNED_IN' && user) {
         showToast(`✓ Welcome, ${user.email ?? 'Operator'}! Identity verified.`, 'success');
-        setCurrentTab((prev) => (prev === 'landing' || prev === 'login' ? 'dashboard' : prev));
+        const targetTab = getIntendedTab();
+        setCurrentTab((prev) => (prev === 'landing' || prev === 'login' ? targetTab : prev));
+        try {
+          const newPath = targetTab === 'landing' ? '/' : `/${targetTab}`;
+          if (window.location.pathname !== newPath) {
+            window.history.pushState(null, '', newPath);
+          }
+        } catch {
+          // Ignore
+        }
       }
     });
 
@@ -157,6 +185,13 @@ export function App() {
   }, [currentTab, dashboardData, loading, mode, fetchDashboardData]);
 
   const handleSelectTab = useCallback((tab: string) => {
+    if (tab === 'login' && currentTab !== 'landing' && currentTab !== 'login') {
+      try {
+        sessionStorage.setItem('ecdat_intended_tab', currentTab);
+      } catch {
+        // Ignore
+      }
+    }
     setCurrentTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     try {
@@ -170,7 +205,7 @@ export function App() {
     if (tab === 'dashboard') {
       void fetchDashboardData(mode);
     }
-  }, [mode, fetchDashboardData]);
+  }, [currentTab, mode, fetchDashboardData]);
 
   // Synchronize browser forward / back button navigation
   useEffect(() => {
@@ -235,8 +270,22 @@ export function App() {
         showToast('⚠️ Sign-out failed — try again.', 'error');
       }
     } else {
+      if (currentTab !== 'landing' && currentTab !== 'login') {
+        try {
+          sessionStorage.setItem('ecdat_intended_tab', currentTab);
+        } catch {
+          // Ignore
+        }
+      }
       setCurrentTab('login');
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      try {
+        if (window.location.pathname !== '/login') {
+          window.history.pushState(null, '', '/login');
+        }
+      } catch {
+        // Ignore
+      }
     }
   }, [isLoggedIn, currentTab, showToast]);
 
@@ -246,9 +295,20 @@ export function App() {
     if (email) {
       setCurrentUserEmail(email);
     }
-    setCurrentTab('dashboard');
+    const targetTab = getIntendedTab();
+    setCurrentTab(targetTab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    void fetchDashboardData(mode);
+    try {
+      const newPath = targetTab === 'landing' ? '/' : `/${targetTab}`;
+      if (window.location.pathname !== newPath) {
+        window.history.pushState(null, '', newPath);
+      }
+    } catch {
+      // Ignore
+    }
+    if (targetTab === 'dashboard') {
+      void fetchDashboardData(mode);
+    }
   }, [mode, fetchDashboardData]);
 
   return (
@@ -338,7 +398,14 @@ export function App() {
                         : 'Restoring your session…'}
                     </p>
                     <button
-                      onClick={() => handleSelectTab('login')}
+                      onClick={() => {
+                        try {
+                          sessionStorage.setItem('ecdat_intended_tab', 'dashboard');
+                        } catch {
+                          // Ignore
+                        }
+                        handleSelectTab('login');
+                      }}
                       style={{
                         padding: '10px 16px',
                         borderRadius: 0,

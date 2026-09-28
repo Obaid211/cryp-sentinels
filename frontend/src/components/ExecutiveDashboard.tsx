@@ -24,12 +24,15 @@ export interface DashboardData {
     medium_count: number;
     safe_count: number;
     avg_mwqrs: number;
+    sources_covered?: number;
   };
   public_scan_stats: {
     hosts_attempted: number;
     hosts_scanned: number;
     hosts_unreachable: number;
     quantum_vulnerable_percent: number;
+    tls_assets?: number;
+    non_tls_assets?: number;
   };
   risk_distribution: Array<{
     name: string;
@@ -37,6 +40,18 @@ export interface DashboardData {
     color: string;
   }>;
   sources_breakdown?: Record<string, number>;
+  algorithm_breakdown?: Array<{
+    algorithm: string;
+    count: number;
+  }>;
+  criticality_distribution?: Array<{
+    level: string;
+    count: number;
+  }>;
+  data_lifetime_distribution?: Array<{
+    lifetime: string;
+    count: number;
+  }>;
   key_type_breakdown: Array<{
     key_type: string;
     count: number;
@@ -48,6 +63,10 @@ export interface DashboardData {
     source?: string;
     business_criticality?: string;
     data_lifetime?: string;
+    algorithm?: string;
+    usage_context?: string;
+    library?: string;
+    file_path?: string;
     service_name: string;
     criticality: string;
     cert_key_type: string;
@@ -392,6 +411,88 @@ export const ExecutiveDashboard = ({
         </div>
       </div>
 
+      {/* 3-Column Multi-Source Analytics: Algorithm Families, Mosca Shelf-Life, Business Criticality */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Algorithm Families */}
+        <div className="border border-[#e5e5e5] bg-white p-5 shadow-flat-sm">
+          <div className="border-b border-[#e5e5e5] pb-2 flex items-center justify-between">
+            <h4 className="font-display text-xs font-bold uppercase text-secondary">
+              Algorithm Families
+            </h4>
+            <span className="font-mono text-[9px] text-tertiary uppercase">CRYPTO PRIMITIVES</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {(data.algorithm_breakdown || []).slice(0, 5).map((item) => (
+              <div key={item.algorithm} className="flex items-center justify-between font-mono text-xs">
+                <span className="text-secondary font-medium">{item.algorithm}</span>
+                <span className="border border-[#e5e5e5] bg-[#faf9f5] px-2 py-0.5 font-bold text-secondary text-[11px]">
+                  {item.count}
+                </span>
+              </div>
+            ))}
+            {(!data.algorithm_breakdown || data.algorithm_breakdown.length === 0) && (
+              <div className="text-xs font-mono text-tertiary">No algorithm distribution recorded.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Mosca Data Shelf-Life */}
+        <div className="border border-[#e5e5e5] bg-white p-5 shadow-flat-sm">
+          <div className="border-b border-[#e5e5e5] pb-2 flex items-center justify-between">
+            <h4 className="font-display text-xs font-bold uppercase text-secondary">
+              Data Lifetime (Mosca Urgency)
+            </h4>
+            <span className="font-mono text-[9px] text-tertiary uppercase">SHELF-LIFE (X)</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {(data.data_lifetime_distribution || []).map((item) => (
+              <div key={item.lifetime} className="flex items-center justify-between font-mono text-xs">
+                <span className="text-secondary font-medium">{item.lifetime} retention</span>
+                <span className={`border px-2 py-0.5 font-bold text-[11px] ${
+                  item.lifetime === '>10y' || item.lifetime === '5-10y'
+                    ? 'border-severity-critical/40 bg-red-50 text-severity-critical'
+                    : 'border-[#e5e5e5] bg-[#faf9f5] text-secondary'
+                }`}>
+                  {item.count}
+                </span>
+              </div>
+            ))}
+            {(!data.data_lifetime_distribution || data.data_lifetime_distribution.length === 0) && (
+              <div className="text-xs font-mono text-tertiary">No data lifetime distribution recorded.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Business Criticality Distribution */}
+        <div className="border border-[#e5e5e5] bg-white p-5 shadow-flat-sm">
+          <div className="border-b border-[#e5e5e5] pb-2 flex items-center justify-between">
+            <h4 className="font-display text-xs font-bold uppercase text-secondary">
+              Business Criticality Tiers
+            </h4>
+            <span className="font-mono text-[9px] text-tertiary uppercase">IMPACT WEIGHT</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {(data.criticality_distribution || []).map((item) => (
+              <div key={item.level} className="flex items-center justify-between font-mono text-xs">
+                <span className="text-secondary font-medium uppercase">{item.level}</span>
+                <span className={`border px-2 py-0.5 font-bold text-[11px] uppercase ${
+                  item.level === 'critical'
+                    ? 'border-severity-critical/40 bg-red-50 text-severity-critical'
+                    : item.level === 'high'
+                    ? 'border-severity-medium/40 bg-amber-50 text-severity-medium'
+                    : 'border-[#e5e5e5] bg-[#faf9f5] text-secondary'
+                }`}>
+                  {item.count}
+                </span>
+              </div>
+            ))}
+            {(!data.criticality_distribution || data.criticality_distribution.length === 0) && (
+              <div className="text-xs font-mono text-tertiary">No criticality distribution recorded.</div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Top Vulnerable Cryptographic Assets Table */}
       <div className="border border-secondary bg-white p-6 shadow-flat">
         <div className="border-b border-[#e5e5e5] pb-4 flex items-center justify-between">
@@ -432,8 +533,13 @@ export const ExecutiveDashboard = ({
                     onClick={() => onNavigateToAsset && onNavigateToAsset(asset.host, asset.port)}
                     className="border-b border-[#eeeeea] hover:bg-[#faf9f5] cursor-pointer transition-colors"
                   >
-                    <td className="py-3 px-3 font-bold text-secondary max-w-[220px] truncate" title={endpointDisplay}>
-                      {endpointDisplay}
+                    <td className="py-3 px-3 font-bold text-secondary max-w-[220px]" title={endpointDisplay}>
+                      <div className="truncate">{endpointDisplay}</div>
+                      {asset.file_path && (
+                        <div className="text-[10px] text-tertiary truncate font-normal" title={asset.file_path}>
+                          {asset.file_path}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-3 whitespace-nowrap">
                       <span className={`border px-2 py-0.5 font-bold text-[10px] uppercase ${badge.className}`}>
@@ -441,7 +547,12 @@ export const ExecutiveDashboard = ({
                       </span>
                     </td>
                     <td className="py-3 px-3 text-secondary">
-                      {asset.service_name}
+                      <div>{asset.service_name}</div>
+                      {asset.usage_context && (
+                        <div className="text-[10px] text-tertiary truncate">
+                          {asset.usage_context}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-3">
                       <span className="border border-[#e5e5e5] bg-white px-2 py-0.5 font-bold text-secondary">

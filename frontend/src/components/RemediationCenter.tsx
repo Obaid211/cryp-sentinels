@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 
@@ -45,10 +45,10 @@ interface RemediationResponse {
 export const RemediationCenter = () => {
   const [data, setData] = useState<RemediationResponse | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPlan = async () => {
+  const fetchPlan = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -65,11 +65,12 @@ export const RemediationCenter = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react/set-state-in-effect
     void fetchPlan();
-  }, []);
+  }, [fetchPlan]);
 
   if (loading && !data) {
     return (
